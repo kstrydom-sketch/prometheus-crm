@@ -17,6 +17,7 @@ import { LP_SECTIONS, normalizeStage, type Project, type ProjectComment } from '
 import { STAGE_COLORS } from '@/lib/stageColors'
 import { createClient } from '@/lib/supabase/client'
 import FeedbackComment from '@/components/FeedbackComment'
+import FinalOutputField from '@/components/FinalOutputField'
 
 // The Landing Page tab's review flow — the UI half of lib/lp-review.ts.
 //
@@ -267,6 +268,10 @@ export function LpChecklistPanel({
     })
   }
 
+  // The discount guide can be written straight from its checklist row.
+  const hasGuide = !!p.shopify_coupon_code?.trim()
+  const [guideOpen, setGuideOpen] = useState(false)
+
   if (!building) {
     const bypassed = step !== null && (!submission || submission.bypassed)
     return (
@@ -311,40 +316,75 @@ export function LpChecklistPanel({
 
       <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
         {checklist.rows.map(row => {
-          const on = row.kind === 'manual' ? !!ticks[row.key] : row.done
+          // Auto rows can't be ticked by hand — they tick when the thing
+          // exists. Their box still answers a click by taking you to where
+          // that thing is done, rather than sitting there looking broken.
+          const noDiscount = !!ticks[NO_DISCOUNT_KEY]
+          let on = row.kind === 'manual' ? !!ticks[row.key] : row.done
+          let box: React.ReactNode
+          if (row.kind === 'manual') {
+            box = <Tick on={on} disabled={disabled || pending} onClick={() => toggle(row.key, !on)} label={row.label} />
+          } else if (row.key === 'discount_guide') {
+            on = hasGuide || noDiscount
+            box = hasGuide
+              ? <Tick on disabled label={`${row.label} — ticked because the guide is written`} />
+              : <Tick
+                  on={on}
+                  disabled={disabled || pending}
+                  // Ticked via "no discount": the box unticks that. Not ticked:
+                  // it opens the guide editor right here.
+                  onClick={() => (noDiscount ? toggle(NO_DISCOUNT_KEY, false) : setGuideOpen(v => !v))}
+                  label={noDiscount ? 'Untick "This page has no discount"' : 'Write the discount setup guide'}
+                />
+          } else {
+            box = <Tick on={on} disabled={disabled || on} onClick={() => scrollToId('page')} label={on ? row.label : `${row.label} — go to Final output`} />
+          }
+
           return (
             <li key={row.key} style={{ display: 'flex', gap: 10, padding: '9px 0', borderBottom: '1px solid var(--border)' }}>
-              {row.kind === 'manual'
-                ? <Tick on={on} disabled={disabled || pending} onClick={() => toggle(row.key, !on)} label={row.label} />
-                : <Tick on={on} disabled label={`${row.label} (checked automatically)`} />}
+              {box}
               <div style={{ minWidth: 0, flex: 1 }}>
                 <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: 8 }}>
                   <span style={{ fontSize: 13, fontWeight: 600, color: on ? 'var(--text-primary)' : 'var(--text-secondary)' }}>{row.label}</span>
                   {row.kind === 'auto' && (
-                    <span style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)' }}>auto</span>
+                    <span style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)' }}>ticks itself</span>
                   )}
                   {row.kind === 'manual' && row.check && on && (
                     <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{row.check.by} · {fmt(row.check.at)}</span>
                   )}
                 </div>
-                <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5, marginTop: 2 }}>{row.help}</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5, marginTop: 2 }}>
+                  {row.key === 'discount_guide' && !hasGuide
+                    ? 'Write how the discount should be set up in Shopify — it ticks once the guide is saved.'
+                    : row.help}
+                </div>
 
                 {row.key === 'deliverable' && !row.done && (
                   <button type="button" onClick={() => scrollToId('page')} style={{ ...linkBtn, marginTop: 4 }}>Go to Final output ↑</button>
                 )}
-                {row.key === 'discount_guide' && !p.shopify_coupon_code?.trim() && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
-                    <Tick
-                      on={!!ticks[NO_DISCOUNT_KEY]}
-                      disabled={disabled || pending}
-                      onClick={() => toggle(NO_DISCOUNT_KEY, !ticks[NO_DISCOUNT_KEY])}
-                      label="This page has no discount"
-                    />
-                    <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>This page has no discount</span>
-                    {!ticks[NO_DISCOUNT_KEY] && (
-                      <button type="button" onClick={() => scrollToId('page')} style={{ ...linkBtn, marginLeft: 'auto' }}>Write the guide ↑</button>
+                {row.key === 'discount_guide' && !hasGuide && !disabled && (
+                  <>
+                    {guideOpen && !noDiscount && (
+                      <div style={{ marginTop: 8 }}>
+                        {/* The same editor as in Final output, writing the same
+                            column — saving it ticks this row. */}
+                        <FinalOutputField field="shopify_coupon_code" projectId={p.id} brandId={p.brand_id} currentValue={null} />
+                      </div>
                     )}
-                  </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+                      {!noDiscount && !guideOpen && (
+                        <button type="button" className="btn-secondary btn-sm" onClick={() => setGuideOpen(true)}>Write the guide</button>
+                      )}
+                      {!noDiscount && !guideOpen && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>or</span>}
+                      <Tick
+                        on={noDiscount}
+                        disabled={pending}
+                        onClick={() => toggle(NO_DISCOUNT_KEY, !noDiscount)}
+                        label="This page has no discount"
+                      />
+                      <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>This page has no discount</span>
+                    </div>
+                  </>
                 )}
               </div>
             </li>
