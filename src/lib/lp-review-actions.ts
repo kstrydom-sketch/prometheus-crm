@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/server'
 import { canEdit } from '@/lib/permissions'
 import { LP_SECTIONS, normalizeStage } from '@/lib/types'
 import { actorFromUser, eventsEnabled, logEvents } from '@/lib/events'
+import { createNotifications } from '@/lib/notifications'
 import { BRAND_DOC_BUCKET, asciiDocName, isUuid } from '@/lib/brand-docs'
 import {
   MANUAL_CHECK_KEYS, MAX_LIQUID_BYTES,
@@ -26,12 +27,15 @@ type Result = { ok: true } | { ok: false; error: string }
 const MIGRATION_MSG = 'The LP review flow needs its database update first — run 20261013_add_lp_review_flow.sql.'
 
 const LP_COLS =
-  'id, brand_id, is_complete, lp_stage, lp_url, shopify_coupon_code, marketing_moment, ' +
+  'id, brand_id, name, lp_editor_id, created_by, is_complete, lp_stage, lp_url, shopify_coupon_code, marketing_moment, ' +
   'lp_internal_step, lp_checklist, lp_submission, lp_discount, lp_liquid_reason'
 
 type LpRow = {
   id: string
   brand_id: string
+  name: string
+  lp_editor_id: string | null
+  created_by: string | null
   is_complete: boolean
   lp_stage: string
   lp_url: string | null
@@ -262,13 +266,14 @@ function withEvent(p: LpRow, event: LpReviewEvent): LpSubmission {
 }
 
 export async function requestLpChanges(projectId: string, brandId: string): Promise<Result> {
-  const { supabase, name } = await staff()
+  const { supabase, user, name } = await staff()
   const p = await readLp(supabase, projectId, brandId)
   if (typeof p === 'string') return { ok: false, error: p }
   if (lpStepOf(p.lp_stage, p.lp_internal_step) !== 'review') {
     return { ok: false, error: 'This page is not waiting on internal review.' }
   }
-  if ((await openInternalCount(supabase, projectId)) === 0) {
+  const open = await openInternalCount(supabase, projectId)
+  if (open === 0) {
     return { ok: false, error: 'Add at least one note saying what to change first.' }
   }
 
@@ -281,6 +286,28 @@ export async function requestLpChanges(projectId: string, brandId: string): Prom
     .select('id')
   if (error) return { ok: false, error: error.message }
   if (!moved?.length) return { ok: false, error: 'Someone moved this page in the meantime. Refresh and try again.' }
+
+  // Tell whoever builds the page that it came back. The assigned LP editor,
+  // plus whoever submitted it if that was someone else; the project's creator
+  // when neither is known (same fallback as client feedback). Never the
+  // reviewer themselves.
+  //
+  // Type 'mentioned', not a new type: notifications.type has a CHECK of three
+  // values, widening it means replacing the constraint, and the bell renders
+  // only title/body/link — the type is never shown.
+  const builders = [p.lp_editor_id, readLpSubmission(p.lp_submission)?.by_id ?? null].filter((id): id is string => !!id)
+  const recipients = (builders.length ? builders : [p.created_by]).filter((id): id is string => !!id && id !== user.id)
+  await createNotifications(recipients.map(recipient_id => ({
+    recipient_id,
+    actor_id: user.id,
+    actor_label: name,
+    type: 'mentioned' as const,
+    project_id: projectId,
+    brand_id: brandId,
+    title: `${name} sent the landing page back with ${plural(open, 'note')}`,
+    body: `${p.name} — fix each note and tick it off, re-run the checklist, then resubmit.`,
+    link: `/brands/${brandId}/projects/${projectId}#internal-review`,
+  })))
 
   revalidateProject(brandId, projectId, true)
   return { ok: true }
