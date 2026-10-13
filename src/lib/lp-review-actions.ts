@@ -11,7 +11,7 @@ import { BRAND_DOC_BUCKET, asciiDocName, isUuid } from '@/lib/brand-docs'
 import {
   MANUAL_CHECK_KEYS, MAX_LIQUID_BYTES,
   evaluateLpChecklist, liquidExt, liquidPath, lpIsBuilding, lpStepOf,
-  readLpChecklist, readLpDiscount, readLpSubmission, safeLiquidName,
+  effectiveLpTicks, readLpDiscount, readLpSubmission, safeLiquidName,
   type LpDiscountMode, type LpReviewEvent, type LpSubmission,
 } from '@/lib/lp-review'
 
@@ -127,7 +127,7 @@ export async function toggleLpChecklistItem(
   // Read-modify-write on one small object. Two people ticking different items
   // in the same second could lose one tick; the page refreshes after every
   // tick, so a lost one is visible and costs a click.
-  const ticks = readLpChecklist(p.lp_checklist)
+  const ticks = effectiveLpTicks(p)
   if (done) ticks[key] = { at: new Date().toISOString(), by: name }
   else delete ticks[key]
 
@@ -170,7 +170,7 @@ export async function submitLpForInternalReview(projectId: string, brandId: stri
   const now = new Date().toISOString()
   const prev = readLpSubmission(p.lp_submission)
   const event: LpReviewEvent = { kind: resubmit ? 'resubmitted' : 'submitted', at: now, by: name }
-  const ticks = readLpChecklist(p.lp_checklist)
+  const ticks = effectiveLpTicks(p)
   const submission: LpSubmission = {
     at: now,
     by: name,
@@ -183,10 +183,11 @@ export async function submitLpForInternalReview(projectId: string, brandId: stri
   }
 
   // Guarded on the stage we read, so a move made by someone else in between
-  // is not silently overwritten.
+  // is not silently overwritten. The ticks are written back, not cleared:
+  // they carry into the next round (see lib/lp-review.ts).
   const { data: moved, error } = await supabase
     .from('projects')
-    .update({ lp_stage: 'internal_review', lp_internal_step: 'review', lp_submission: submission, lp_checklist: null })
+    .update({ lp_stage: 'internal_review', lp_internal_step: 'review', lp_submission: submission, lp_checklist: Object.keys(ticks).length ? ticks : null })
     .eq('id', projectId)
     .eq('lp_stage', p.lp_stage)
     .select('id')
@@ -305,7 +306,7 @@ export async function requestLpChanges(projectId: string, brandId: string): Prom
     project_id: projectId,
     brand_id: brandId,
     title: `${name} sent the landing page back with ${plural(open, 'note')}`,
-    body: `${p.name} — fix each note and tick it off, re-run the checklist, then resubmit.`,
+    body: `${p.name} — fix each note, tick it off, then resubmit.`,
     link: `/brands/${brandId}/projects/${projectId}#internal-review`,
   })))
 
@@ -317,12 +318,16 @@ export async function approveLpInternalReview(projectId: string, brandId: string
   const { supabase, name } = await staff()
   const p = await readLp(supabase, projectId, brandId)
   if (typeof p === 'string') return { ok: false, error: p }
-  if (lpStepOf(p.lp_stage, p.lp_internal_step) !== 'review') {
-    return { ok: false, error: 'This page is not waiting on internal review.' }
+  // From Internal Revisions too: once every note is ticked off the reviewer
+  // can approve on the spot, instead of waiting for a formal resubmit only to
+  // look at the same fixes again.
+  const step = lpStepOf(p.lp_stage, p.lp_internal_step)
+  if (step !== 'review' && step !== 'revisions') {
+    return { ok: false, error: 'This page is not in internal review.' }
   }
   const open = await openInternalCount(supabase, projectId)
   if (open > 0) {
-    return { ok: false, error: `${plural(open, 'internal note')} still open. Send them back as changes, or tick them off.` }
+    return { ok: false, error: `${plural(open, 'internal note')} still open. Tick them off once fixed${step === 'review' ? ', or send them back as changes' : ''}.` }
   }
 
   const submission = withEvent(p, { kind: 'approved', at: new Date().toISOString(), by: name })

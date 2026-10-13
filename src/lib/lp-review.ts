@@ -173,8 +173,9 @@ export const LP_DISCOUNT_LABELS: Record<LpDiscountMode, string> = {
 //
 // Two kinds of item. AUTO items are read off the project — nobody can tick
 // "discount guide written" while the box is empty. MANUAL items are a person
-// saying they did it; they are emptied on every submission, so a page that
-// came back with changes is re-tested before it goes in again.
+// saying they did it. They CARRY OVER between rounds: a page that came back
+// with two notes fixed is not re-ticked from zero (that blocked resubmission
+// behind ten clicks); the team unticks whatever a change affected.
 
 export interface LpChecklistItem {
   key: string
@@ -221,6 +222,21 @@ export interface LpChecklistProject {
   shopify_coupon_code: string | null
   lp_liquid_reason?: string | null
   lp_checklist?: unknown
+  lp_submission?: unknown
+}
+
+/**
+ * The ticks that count right now. Normally lp_checklist. Pages submitted
+ * before ticks carried over had theirs emptied at submission, so a round with
+ * none of its own falls back to what the last submission confirmed — they
+ * come back from internal review still ticked, not at zero.
+ */
+export function effectiveLpTicks(p: { lp_checklist?: unknown; lp_submission?: unknown }): LpChecklist {
+  const own = readLpChecklist(p.lp_checklist)
+  if (Object.keys(own).length) return own
+  const sub = readLpSubmission(p.lp_submission)
+  if (!sub) return {}
+  return Object.fromEntries(sub.checks.map(k => [k, { at: sub.at, by: sub.by }]))
 }
 
 export interface LpChecklistRow extends LpChecklistItem {
@@ -239,7 +255,7 @@ export interface LpChecklistResult {
 }
 
 export function evaluateLpChecklist(p: LpChecklistProject, liquidFileCount: number): LpChecklistResult {
-  const ticks = readLpChecklist(p.lp_checklist)
+  const ticks = effectiveLpTicks(p)
   const deliverable: 'url' | 'liquid' | null = p.lp_url?.trim()
     ? 'url'
     : liquidFileCount > 0 && !!p.lp_liquid_reason?.trim() ? 'liquid' : null

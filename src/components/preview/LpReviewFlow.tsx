@@ -121,8 +121,8 @@ export function LpNextStep({
     note = openInternal > 0
       ? `${plural(openInternal, 'internal note')} to fix — tick each one off as you go.`
       : !checklist.complete
-        ? `Notes fixed. Re-run the checklist to resubmit — ${done} of ${total} done.`
-        : `Fixed and re-tested. Send it back to ${LP_INTERNAL_REVIEWER}.`
+        ? `Notes fixed. Finish the checklist to resubmit — ${done} of ${total} done.`
+        : `All notes fixed. Resubmit it to ${LP_INTERNAL_REVIEWER}, or approve it in Internal review below.`
     action = {
       label: 'Resubmit for internal review',
       fn: () => submitLpForInternalReview(p.id, p.brand_id),
@@ -294,7 +294,7 @@ export function LpChecklistPanel({
           </>
         ) : (
           <span style={{ color: 'var(--text-muted)' }}>
-            Not open right now. It opens whenever the page is being built or fixed, and is re-done before every submission.
+            Not open right now. It opens whenever the page is being built or fixed.
           </span>
         )}
       </div>
@@ -314,9 +314,9 @@ export function LpChecklistPanel({
         </span>
       </div>
 
-      {step === 'revisions' && (
+      {(step === 'revisions' || normalizeStage(p.lp_stage) === 'revisions') && (
         <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 12 }}>
-          Fixes change the page, so the checks are done again before it goes back to {LP_INTERNAL_REVIEWER}.
+          Ticks from the last round are kept. Untick anything the changes affected.
         </div>
       )}
 
@@ -409,12 +409,14 @@ const EVENT_LABELS: Record<LpReviewEventKind, string> = {
 interface PendingShot { url: string; preview: string }
 
 export function LpInternalReviewPanel({
-  project: p, feedback, submission, disabled = false,
+  project: p, feedback, submission, checklist, disabled = false,
 }: {
   project: Project
   /** Internal LP notes (track 'lp', audience 'internal'), any order. */
   feedback: ProjectComment[]
   submission: LpSubmission | null
+  /** For the resubmit button in Internal Revisions. */
+  checklist: LpChecklistResult
   disabled?: boolean
 }) {
   const { pending, err, setErr, run } = useAction()
@@ -599,6 +601,36 @@ export function LpInternalReviewPanel({
         </div>
       )}
 
+      {/* Internal Revisions: the way forward sits next to the notes it depends
+          on. It used to be only in the bar at the top of the tab, so with every
+          note ticked off this card offered nothing to click. The team
+          resubmits; the reviewer can also approve on the spot. */}
+      {step === 'revisions' && !disabled && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 18, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
+          <span style={{ fontSize: 12, color: 'var(--text-muted)', flex: 1, minWidth: 200 }}>
+            {open.length
+              ? `${plural(open.length, 'note')} still to fix. Tick each one off once it is done.`
+              : !checklist.complete
+                ? <>All notes fixed. Finish the checklist to resubmit ({checklist.done} of {checklist.total}) <button type="button" onClick={() => scrollToId('checklist')} style={linkBtn}>↓</button> — or approve it now.</>
+                : 'All notes fixed. Resubmit it for review, or approve it now.'}
+          </span>
+          <button
+            type="button"
+            className="btn-secondary btn-sm"
+            disabled={pending || open.length > 0 || !checklist.complete}
+            title={open.length ? 'Tick off every note first.' : !checklist.complete ? 'Finish the checklist first.' : undefined}
+            onClick={() => run(() => submitLpForInternalReview(p.id, p.brand_id))}
+          >Resubmit for internal review</button>
+          <button
+            type="button"
+            className="btn-primary btn-sm"
+            disabled={pending || open.length > 0}
+            title={open.length ? 'Tick off every note first.' : undefined}
+            onClick={() => run(() => approveLpInternalReview(p.id, p.brand_id))}
+          >Approve → Discount creation</button>
+        </div>
+      )}
+
       <ErrorLine text={err} />
     </div>
   )
@@ -658,6 +690,13 @@ export function LpDiscountPanel({
             </div>
             {!disabled && (
               <button type="button" className="btn-secondary btn-sm" onClick={() => { setMode(discount.mode); setNote(discount.note ?? ''); setEditing(true) }}>Change</button>
+            )}
+            {/* The last step, right where it is unlocked — not only in the bar
+                at the top of the tab. */}
+            {!disabled && lpStepOf(p.lp_stage, p.lp_internal_step) === 'discount' && (
+              <button type="button" className="btn-primary btn-sm" disabled={pending} onClick={() => run(() => sendLpToClientReview(p.id, p.brand_id))}>
+                {pending ? 'Sending…' : 'Send to client review →'}
+              </button>
             )}
           </div>
         ) : disabled ? (

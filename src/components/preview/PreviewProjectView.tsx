@@ -1602,7 +1602,7 @@ export default function PreviewProjectView({
                 id="checklist"
                 title="Pre-submission checklist"
                 purpose={lpBuilding
-                  ? 'Everything here must be done before the page can be submitted. Re-done for every submission.'
+                  ? 'Everything here must be done before the page can be submitted. Ticks carry over between rounds — untick anything a change affected.'
                   : 'Confirmed by the team when the page was submitted.'}
               >
                 <LpChecklistPanel project={p} checklist={lpChecklist} submission={lpSubmission} disabled={p.is_complete} />
@@ -1618,6 +1618,7 @@ export default function PreviewProjectView({
                     project={p}
                     feedback={lpInternalFeedback}
                     submission={lpSubmission}
+                    checklist={lpChecklist}
                     disabled={p.is_complete}
                   />
                 </Card>
