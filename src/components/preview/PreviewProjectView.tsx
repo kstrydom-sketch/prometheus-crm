@@ -918,7 +918,7 @@ export default function PreviewProjectView({
             <div style={{ display: 'grid', gap: 12, marginTop: 12 }}>
               {/* Locked once complete, like the live page. A finished project
                   should not quietly move backwards. */}
-              <StageTracker projectId={p.id} brandId={p.brand_id} track="lp_stage" currentStage={p.lp_stage} label="Landing Page" disabled={p.is_complete} />
+              <StageTracker projectId={p.id} brandId={p.brand_id} track="lp_stage" currentStage={p.lp_stage} label="Landing Page" disabled={p.is_complete} lpStep={p.lp_internal_step} />
               <StageTracker projectId={p.id} brandId={p.brand_id} track="creatives_stage" currentStage={p.creatives_stage} label="Creatives / Statics" disabled={p.is_complete} />
             </div>
           </details>

@@ -11,6 +11,8 @@ import {
 } from '@dnd-kit/core'
 import { STAGE_ORDER, STAGE_LABELS, profileName, type Stage, type Project, type Profile } from '@/lib/types'
 import { updateProjectStage, updateProjectStagesBoth } from '@/lib/actions'
+import { submitLpForInternalReview, sendLpToClientReview } from '@/lib/lp-review-actions'
+import { lpMoveRoute } from '@/lib/lp-review'
 import { isProjectOverdue, phaseDueTone, STAGE_COLORS, STAGE_DUE_FIELD } from '@/lib/stageColors'
 import KanbanCard from './KanbanCard'
 import CopyMarkdownButton from '@/components/CopyMarkdownButton'
@@ -203,6 +205,15 @@ export default function KanbanView({
   // input methods move a card the same way.
   const moveCard = useCallback((card: PipelineProject, targetStage: Stage) => {
     if (cardColumn(card, trackView) === targetStage) return
+
+    // The landing page's review flow (lib/lp-review.ts) applies on the board
+    // too: into Internal Review only through the checklist, into Client Review
+    // only through internal review + discount. Refused up front, so the reason
+    // is readable rather than a stripped server error.
+    const lpRoute = trackView === 'creatives' ? null : lpMoveRoute(card.lp_stage, targetStage)
+    if (lpRoute?.kind === 'blocked') { setDragErr(lpRoute.reason); return }
+    const lpGated = lpRoute?.kind === 'submit' || lpRoute?.kind === 'send'
+
     const snapshot = [...localProjects]
     // In a single-track view, a drag advances only that track — the other
     // track's stage must not be dragged along with it.
@@ -215,8 +226,22 @@ export default function KanbanView({
     ))
     setDragErr('')
     startTransition(async () => {
+      // Set once the LP has really moved, so a later failure (the creatives'
+      // own gate) refreshes to the true state instead of snapping both back.
+      let lpMoved = false
       try {
-        if (trackView === 'combined') {
+        if (lpGated) {
+          // The LP goes first, through its own gate; the creatives follow only
+          // if it passed.
+          const r = lpRoute?.kind === 'submit'
+            ? await submitLpForInternalReview(card.id, card.brands.id)
+            : await sendLpToClientReview(card.id, card.brands.id)
+          if (!r.ok) throw new Error(r.error)
+          lpMoved = true
+          if (trackView === 'combined') {
+            await updateProjectStage(card.id, card.brands.id, 'creatives_stage', targetStage)
+          }
+        } else if (trackView === 'combined') {
           await updateProjectStagesBoth(card.id, card.brands.id, targetStage)
         } else {
           await updateProjectStage(
@@ -232,6 +257,7 @@ export default function KanbanView({
         // given — and the commonest refusal now is a deliberate one.
         setLocalProjects(snapshot)
         setDragErr(e instanceof Error ? e.message : 'Could not move that card.')
+        if (lpMoved) router.refresh()
       }
     })
   }, [localProjects, router, startTransition, trackView])

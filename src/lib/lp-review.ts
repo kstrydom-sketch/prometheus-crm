@@ -51,6 +51,54 @@ export function lpIsBuilding(lpStage: string | null | undefined, step: string | 
   return stage === 'brief' || stage === 'in_progress' || stage === 'revisions' || lpStepOf(stage, step) === 'revisions'
 }
 
+// ── Moving the LP track ─────────────────────────────────────────────────────
+//
+// The stage rail and the kanban board can move a track anywhere, which used to
+// let a landing page skip the checklist, the internal review and the discount
+// entirely. Every LP move is judged here first:
+//
+//   ok       a plain move (backwards, sideways, or one that skips nothing)
+//   submit   into Internal Review from a building stage — only through
+//            submitLpForInternalReview, which enforces the checklist
+//   send     Internal Review → Client Review — only through
+//            sendLpToClientReview, which enforces approval + discount
+//   blocked  skips the gates altogether; the reason says what to do instead
+
+export type LpMoveRoute =
+  | { kind: 'ok' }
+  | { kind: 'submit' }
+  | { kind: 'send' }
+  | { kind: 'blocked'; reason: string }
+
+const BUILD_STAGES: Stage[] = ['brief', 'in_progress', 'revisions']
+const AFTER_INTERNAL: Stage[] = ['client_review', 'ready', 'live']
+
+export function lpMoveRoute(from: string | null | undefined, to: Stage): LpMoveRoute {
+  const f = normalizeStage(from)
+  if (f === to) return { kind: 'ok' }
+  if (BUILD_STAGES.includes(f)) {
+    if (to === 'internal_review') return { kind: 'submit' }
+    if (AFTER_INTERNAL.includes(to)) {
+      return { kind: 'blocked', reason: 'The landing page has to pass the checklist and internal review first. Use "Submit for internal review" on its Landing Page tab.' }
+    }
+  }
+  if (f === 'internal_review') {
+    if (to === 'client_review') return { kind: 'send' }
+    if (to === 'ready' || to === 'live') {
+      return { kind: 'blocked', reason: 'Send the landing page to client review first — after internal review and discount creation, from its Landing Page tab.' }
+    }
+  }
+  return { kind: 'ok' }
+}
+
+/** Why a generic stage move refused an LP move that has its own path. */
+export function lpMoveRefusal(route: LpMoveRoute): string | null {
+  if (route.kind === 'blocked') return route.reason
+  if (route.kind === 'submit') return 'Landing pages go into internal review through "Submit for internal review", once the checklist is done.'
+  if (route.kind === 'send') return 'Landing pages go to the client through "Send to client review", after internal review and discount creation.'
+  return null
+}
+
 // ── JSONB shapes ────────────────────────────────────────────────────────────
 // What we write. Reads go through the readers below, never a cast: the column
 // holds whatever was put there, and NULL is the normal state.

@@ -22,6 +22,7 @@ import {
 import { createNotifications } from '@/lib/notifications'
 import { driveThumb } from './drive-thumb'
 import { createServiceClient } from '@/lib/supabase/service'
+import { lpMoveRefusal, lpMoveRoute } from '@/lib/lp-review'
 import { momentCode } from '@/lib/moment-code'
 import {
   BRAND_DOC_BUCKET, BRAND_DOC_TYPES, MAX_BRAND_DOC_BYTES,
@@ -288,11 +289,21 @@ export async function updateProjectStage(
     await assertCreativesSendable(supabase, projectId)
   }
 
-  // Event log needs the from-stage, so read before writing. Skipped entirely
-  // when instrumentation is killed via PROMETHEUS_EVENTS_DISABLED.
-  const prev = eventsEnabled()
+  // Event log needs the from-stage, so read before writing. Skipped when
+  // instrumentation is killed via PROMETHEUS_EVENTS_DISABLED — except for an LP
+  // move, which always needs it for the review-flow gate below.
+  const prev = eventsEnabled() || track === 'lp_stage'
     ? (await supabase.from('projects').select('lp_stage, creatives_stage, marketing_moment').eq('id', projectId).single()).data
     : null
+
+  // LP review flow (lib/lp-review.ts): a landing page enters Internal Review
+  // only through the checklist and reaches the client only through internal
+  // review + discount. The rail and the board route those moves to their own
+  // actions first, so this is the backstop for anything that did not.
+  if (track === 'lp_stage') {
+    const refusal = lpMoveRefusal(lpMoveRoute(prev?.lp_stage, stage))
+    if (refusal) throw new Error(refusal)
+  }
 
   const { error } = await supabase
     .from('projects')
@@ -387,9 +398,13 @@ export async function updateProjectStagesBoth(
     await assertCreativesSendable(supabase, projectId)
   }
 
-  const prev = eventsEnabled()
-    ? (await supabase.from('projects').select('lp_stage, creatives_stage, marketing_moment').eq('id', projectId).single()).data
-    : null
+  // Always read: the LP half of this move goes through the review-flow gate.
+  const prev = (await supabase.from('projects').select('lp_stage, creatives_stage, marketing_moment').eq('id', projectId).single()).data
+
+  // Same backstop as updateProjectStage — the board routes gated LP moves to
+  // their own actions and moves the creatives separately.
+  const refusal = lpMoveRefusal(lpMoveRoute(prev?.lp_stage, stage))
+  if (refusal) throw new Error(refusal)
 
   const { error } = await supabase
     .from('projects')

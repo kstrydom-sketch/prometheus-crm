@@ -3,6 +3,8 @@
 import { useOptimistic, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { updateProjectStage, creativeClientVisibility } from '@/lib/actions'
+import { submitLpForInternalReview, sendLpToClientReview } from '@/lib/lp-review-actions'
+import { lpMoveRoute, lpStageDisplay } from '@/lib/lp-review'
 import { useConfirm } from '@/components/ConfirmDialog'
 import { STAGE_ORDER, STAGE_LABELS, STAGE_COLORS, normalizeStage, type Stage } from '@/lib/stageColors'
 
@@ -13,6 +15,8 @@ interface StageTrackerProps {
   currentStage: Stage
   label: string
   disabled?: boolean
+  /** LP only: the review sub-step, so "Now" can say Internal Revisions etc. */
+  lpStep?: string | null
 }
 
 // One track's pipeline as a rail of steps. Every step is a button, so a project
@@ -26,6 +30,7 @@ export default function StageTracker({
   currentStage,
   label,
   disabled = false,
+  lpStep,
 }: StageTrackerProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -47,6 +52,32 @@ export default function StageTracker({
 
   async function moveTo(stage: Stage) {
     if (disabled || isPending || stage === optimisticStage) return
+    setErr('')
+
+    // A landing page cannot skip its review flow from here (lib/lp-review.ts).
+    // Into Internal Review goes through the checklist, into Client Review
+    // through approval + discount — the same actions as the Landing Page tab's
+    // buttons, so their refusals ("Finish the checklist first — 6 of 10 done")
+    // show here word for word. Skipping past both is refused outright.
+    if (track === 'lp_stage') {
+      const route = lpMoveRoute(optimisticStage, stage)
+      if (route.kind === 'blocked') { setErr(route.reason); return }
+      if (route.kind === 'submit' || route.kind === 'send') {
+        startTransition(async () => {
+          setOptimisticStage(stage)
+          const r = route.kind === 'submit'
+            ? await submitLpForInternalReview(projectId, brandId)
+            : await sendLpToClientReview(projectId, brandId)
+          if (!r.ok) {
+            setOptimisticStage(normalizeStage(currentStage))
+            setErr(r.error)
+            return
+          }
+          router.refresh()
+        })
+        return
+      }
+    }
 
     // Entering client review on the creatives track IS "sent to client" — the
     // link goes out and the event fires. Stop it reaching a client as an empty
@@ -131,7 +162,9 @@ export default function StageTracker({
           marginLeft: 'auto', fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 999,
           background: currColors.bg, color: currColors.text,
         }}>
-          Now · {STAGE_LABELS[optimisticStage]}
+          Now · {track === 'lp_stage' && optimisticStage === normalizeStage(currentStage)
+            ? lpStageDisplay(optimisticStage, lpStep).label
+            : STAGE_LABELS[optimisticStage]}
         </span>
         {disabled && (
           <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>🔒 Locked</span>
