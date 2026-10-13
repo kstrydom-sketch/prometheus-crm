@@ -5,21 +5,22 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { BRAND_DOC_BUCKET } from '@/lib/brand-docs'
 import {
-  LIQUID_ACCEPT, LIQUID_CONTENT_TYPE, MAX_LIQUID_BYTES, liquidExt, type LpLiquidFile,
+  CODE_FILE_TYPES, LIQUID_ACCEPT, LIQUID_CONTENT_TYPE, MAX_LIQUID_BYTES, liquidExt, type LpLiquidFile,
 } from '@/lib/lp-review'
 import {
   setLpLiquidReason, createLpLiquidUploadUrl, attachLpLiquidFile, getLpLiquidFileUrl, removeLpLiquidFile,
 } from '@/lib/lp-review-actions'
 
-// Handing a landing page in as Liquid files — the LAST RESORT, for clients
-// whose Shopify we cannot get into. With store access the page is published
-// and its URL goes in Final output; this is not offered at all once a URL is
-// there. A reason is required before anything can be uploaded, so every
-// Liquid hand-in says why it was one.
+// Handing a landing page in as code files — Liquid for Shopify, HTML for other
+// platforms (BigCommerce…) — the LAST RESORT, for clients whose store we cannot
+// get into. With store access the page is published and its URL goes in Final
+// output; this is not offered at all once a URL is there. A reason is required
+// before anything can be uploaded, so every code hand-in says why it was one.
 //
 // Files go to the private brand-docs bucket through a signed upload URL (see
-// lp-review-actions.ts). Every theme file is text, so every one is sent as
-// text/plain — the one text type that bucket accepts.
+// lp-review-actions.ts). Every accepted type is text, so every one is sent as
+// text/plain — the one text type that bucket accepts. HTML is therefore stored
+// and served as text: "View" shows its source, it is never rendered.
 
 const fmt = (iso: string) => new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 const kb = (bytes: number) => bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toFixed(bytes < 10240 ? 1 : 0)} KB`
@@ -65,7 +66,7 @@ export default function LpLiquidFiles({
     const errs: string[] = []
     const supabase = createClient()
     for (const file of list) {
-      if (!liquidExt(file.name)) { errs.push(`${file.name}: only .liquid, .json, .css and .js theme files.`); continue }
+      if (!liquidExt(file.name)) { errs.push(`${file.name}: only ${CODE_FILE_TYPES} files.`); continue }
       if (file.size > MAX_LIQUID_BYTES) { errs.push(`${file.name}: over the ${MAX_LIQUID_BYTES / 1048576}MB limit.`); continue }
       try {
         const signed = await createLpLiquidUploadUrl(projectId, brandId, file.name, file.size)
@@ -134,7 +135,7 @@ export default function LpLiquidFiles({
           type="button"
           onClick={() => setOpen(true)}
           style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 12, color: 'var(--text-muted)', textDecoration: 'underline', textUnderlineOffset: 3 }}
-        >No access to the client&apos;s store? Hand in Liquid files instead</button>
+        >No access to the client&apos;s store? Hand in the code files (Liquid or HTML) instead</button>
       </div>
     )
   }
@@ -143,7 +144,7 @@ export default function LpLiquidFiles({
     <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
         <span style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-          Liquid files{files.length ? ` · ${files.length}` : ''}
+          Code files{files.length ? ` · ${files.length}` : ''}
         </span>
         {!reason && files.length === 0 && !disabled && (
           <button type="button" onClick={() => setOpen(false)} style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--text-muted)' }}>Cancel</button>
@@ -156,7 +157,7 @@ export default function LpLiquidFiles({
         </div>
       ) : (
         <div style={{ padding: '10px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, marginBottom: 10, background: 'var(--urgent-soon-bg)', color: 'var(--urgent-soon)', border: '1px solid var(--urgent-soon)' }}>
-          Last resort — only when we cannot get into the client&apos;s Shopify. If we have access, publish the page and paste its URL above instead.
+          Last resort — only when we cannot get into the client&apos;s store. If we have access, publish the page and paste its URL above instead.
         </div>
       )}
 
@@ -171,7 +172,7 @@ export default function LpLiquidFiles({
               value={draft}
               onChange={e => setDraft(e.target.value)}
               rows={2}
-              placeholder="e.g. Client hasn't given us staff access to their Shopify; they will install the section themselves."
+              placeholder="e.g. BigCommerce store and we don't have full access; the client will install the page themselves."
               style={{ width: '100%', fontSize: 13, lineHeight: 1.5, padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface-1)', color: 'var(--text-primary)', resize: 'vertical', fontFamily: 'inherit' }}
             />
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 6 }}>
@@ -205,7 +206,7 @@ export default function LpLiquidFiles({
             disabled={busy}
             onChange={e => { const f = Array.from(e.target.files ?? []); e.target.value = ''; void upload(f) }}
           />
-          {busy ? 'Uploading…' : 'Upload theme files — .liquid sections and snippets, .json templates, .css/.js assets'}
+          {busy ? 'Uploading…' : 'Upload code files — .html pages, .liquid sections and snippets, .json templates, .css/.js assets'}
         </label>
       )}
 

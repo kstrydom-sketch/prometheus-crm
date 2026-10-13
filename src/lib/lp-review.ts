@@ -182,15 +182,15 @@ export interface LpChecklistItem {
   label: string
   help: string
   kind: 'auto' | 'manual'
-  /** Only for pages handed in as a URL (a Liquid file has no public link). */
+  /** Only for pages handed in as a URL (code files have no public link). */
   urlOnly?: boolean
 }
 
 export const LP_CHECKLIST: LpChecklistItem[] = [
   { key: 'deliverable', kind: 'auto', label: 'Page handed in',
-    help: 'The page URL in Final output — or, only if we have no store access, the Liquid files.' },
+    help: 'The page URL in Final output — or, only if we have no store access, the code files (Liquid or HTML).' },
   { key: 'discount_guide', kind: 'auto', label: 'Discount setup guide written',
-    help: 'How the discount should be set up in Shopify, in the Discount setup guide box above.' },
+    help: 'How the discount should be set up in the store, in the Discount setup guide box above.' },
   { key: 'mobile', kind: 'manual', label: 'Tested on a real phone',
     help: 'On an actual phone, not a narrow browser window. Scroll the whole page: nothing cut off, overlapping or scrolling sideways; sticky bars and menus work.' },
   { key: 'desktop', kind: 'manual', label: 'Tested on desktop',
@@ -206,7 +206,7 @@ export const LP_CHECKLIST: LpChecklistItem[] = [
   { key: 'brand', kind: 'manual', label: 'On brand',
     help: 'Fonts, colours, logo and tone follow the brand guidelines.' },
   { key: 'private_window', kind: 'manual', label: 'Opens in a private window', urlOnly: true,
-    help: 'Open the URL logged out (incognito), not only while signed in to Shopify. No password page, no expiring theme preview link.' },
+    help: 'Open the URL logged out (incognito), not only while signed in to the store admin. No password page, no expiring preview link.' },
 ]
 
 /** Ticked instead of writing a guide, for a page that has no discount. */
@@ -285,12 +285,19 @@ export function evaluateLpChecklist(p: LpChecklistProject, liquidFileCount: numb
 // bucket needs no change. The extension in the PATH comes from this allowlist,
 // never from the file name.
 
-export const LIQUID_EXTS = ['liquid', 'json', 'css', 'js'] as const
+// "Liquid" in these names is historical: the hand-in also takes plain HTML,
+// for stores that are not Shopify (BigCommerce and the like). The UI calls
+// them code files. Every one of these types is text, so all go up as
+// text/plain — the bucket needs no change, and an .html file is stored and
+// served as text, never rendered.
+export const LIQUID_EXTS = ['liquid', 'html', 'htm', 'json', 'css', 'js'] as const
 export const LIQUID_ACCEPT = LIQUID_EXTS.map(e => `.${e}`).join(',')
 export const LIQUID_CONTENT_TYPE = 'text/plain'
-// Theme files are kilobytes. 5MB is generous and still nowhere near the
-// bucket's own 50MB ceiling.
-export const MAX_LIQUID_BYTES = 5 * MB
+/** For messages: what can be handed in. */
+export const CODE_FILE_TYPES = '.liquid, .html, .json, .css and .js'
+// Theme files are kilobytes; an exported HTML page can inline its images and
+// run to megabytes. 10MB covers that and is well under the bucket's 50MB.
+export const MAX_LIQUID_BYTES = 10 * MB
 
 export function liquidExt(fileName: string): (typeof LIQUID_EXTS)[number] | null {
   const ext = (fileName.split('.').pop() || '').toLowerCase()

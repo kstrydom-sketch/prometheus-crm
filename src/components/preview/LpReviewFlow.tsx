@@ -321,7 +321,7 @@ export function LpChecklistPanel({
           <span style={{
             fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 999, flexShrink: 0,
             border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-secondary)',
-          }}>{submission.deliverable === 'liquid' ? 'Liquid files' : 'Live URL'}</span>
+          }}>{submission.deliverable === 'liquid' ? 'Code files' : 'Live URL'}</span>
           <button type="button" onClick={() => setShowChecks(v => !v)} aria-expanded={showChecks} style={{ ...linkBtn, flexShrink: 0 }}>
             {showChecks ? 'Hide checks' : 'Show checks'}
           </button>
@@ -403,7 +403,7 @@ export function LpChecklistPanel({
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5, marginTop: 2 }}>
                   {row.key === 'discount_guide' && !hasGuide
-                    ? 'Write how the discount should be set up in Shopify — it ticks once the guide is saved.'
+                    ? 'Write how the discount should be set up in the store — it ticks once the guide is saved.'
                     : row.help}
                 </div>
 
@@ -680,7 +680,7 @@ export function LpInternalReviewPanel({
 // ── Discount creation ───────────────────────────────────────────────────────
 
 const DISCOUNT_HELP: Record<LpDiscountMode, string> = {
-  team: `${LP_INTERNAL_REVIEWER} set it up in Shopify from the guide.`,
+  team: `${LP_INTERNAL_REVIEWER} set it up in the store from the guide.`,
   client: 'We have no access, so the client sets it up. Note what they were sent.',
   none: 'The offer needs no discount code or automatic discount.',
 }

@@ -9,7 +9,7 @@ import { actorFromUser, eventsEnabled, logEvents } from '@/lib/events'
 import { createNotifications } from '@/lib/notifications'
 import { BRAND_DOC_BUCKET, asciiDocName, isUuid } from '@/lib/brand-docs'
 import {
-  MANUAL_CHECK_KEYS, MAX_LIQUID_BYTES,
+  CODE_FILE_TYPES, MANUAL_CHECK_KEYS, MAX_LIQUID_BYTES,
   evaluateLpChecklist, liquidExt, liquidPath, lpIsBuilding, lpStepOf,
   effectiveLpTicks, readLpDiscount, readLpSubmission, safeLiquidName,
   type LpDiscountMode, type LpReviewEvent, type LpSubmission,
@@ -430,7 +430,7 @@ export async function sendLpToClientReview(projectId: string, brandId: string): 
 
 // ── Liquid files (last resort, no store access) ─────────────────────────────
 
-const LIQUID_REFUSED_URL = 'This page has a URL. Liquid files are only for when we have no access to the client’s store.'
+const LIQUID_REFUSED_URL = 'This page has a URL. Code files are only for when we have no access to the client’s store.'
 
 export async function setLpLiquidReason(projectId: string, brandId: string, reason: string): Promise<Result> {
   const { supabase } = await staff()
@@ -459,7 +459,7 @@ export async function createLpLiquidUploadUrl(
   const { supabase } = await staff()
 
   const ext = liquidExt(fileName)
-  if (!ext) return { ok: false, error: 'Only .liquid, .json, .css and .js theme files can be handed in.' }
+  if (!ext) return { ok: false, error: `Only ${CODE_FILE_TYPES} files can be handed in.` }
   if (!Number.isFinite(byteSize) || byteSize <= 0) return { ok: false, error: 'That file is empty.' }
   if (byteSize > MAX_LIQUID_BYTES) return { ok: false, error: `That file is over the ${MAX_LIQUID_BYTES / 1048576}MB limit.` }
 

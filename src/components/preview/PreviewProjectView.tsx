@@ -391,7 +391,7 @@ export default function PreviewProjectView({
   brandAdAccount: string | null
   /** Rationale fields from the source offer card, for the LP brief export. Null when the card has no linked offer. */
   sourceOffer?: LpBriefSourceOffer | null
-  /** Liquid files handed in for the landing page (no store access). */
+  /** Code files (Liquid or HTML) handed in for the landing page (no store access). */
   liquidFiles?: LpLiquidFile[]
 }) {
   const [tab, setTab] = useState<Tab>('overview')
@@ -1512,7 +1512,7 @@ export default function PreviewProjectView({
                   <>
                     <Missing tone="muted">
                       {lpChecklist.deliverable === 'liquid'
-                        ? 'No URL — handed in as Liquid files below (no store access).'
+                        ? 'No URL — handed in as code files below (no store access).'
                         : 'No page yet. This is a build, not a revision.'}
                     </Missing>
                     {/* The submit box, right where the absence is announced. It
