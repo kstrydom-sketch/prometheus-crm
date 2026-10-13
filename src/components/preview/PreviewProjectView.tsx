@@ -1561,7 +1561,9 @@ export default function PreviewProjectView({
                     the URL: free text on how the discount is configured in
                     Shopify (the column is still named shopify_coupon_code from
                     when it held a bare code). Also moved here from Edit details. */}
-                <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
+                {/* id: the checklist and the Discount creation card point here
+                    rather than showing the guide (or its editor) a second time. */}
+                <div id="discount-guide" style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--border)', scrollMarginTop: 80 }}>
                   <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Discount setup guide</div>
                   {p.is_complete ? (
                     p.shopify_coupon_code ? (

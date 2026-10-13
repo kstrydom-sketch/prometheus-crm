@@ -17,7 +17,6 @@ import { LP_SECTIONS, normalizeStage, type Project, type ProjectComment } from '
 import { STAGE_COLORS } from '@/lib/stageColors'
 import { createClient } from '@/lib/supabase/client'
 import FeedbackComment from '@/components/FeedbackComment'
-import FinalOutputField from '@/components/FinalOutputField'
 
 // The Landing Page tab's review flow — the UI half of lib/lp-review.ts.
 //
@@ -36,6 +35,15 @@ type ActionResult = { ok: true } | { ok: false; error: string } | void
 const fmt = (iso: string) => new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`
 const scrollToId = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+
+// The discount setup guide has exactly one editor: Final output's. Everything
+// else points at it instead of showing the guide a second time. With no guide
+// yet its textarea is already open, so this lands the cursor in it.
+function goToGuideEditor() {
+  const box = document.getElementById('discount-guide')
+  box?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  box?.querySelector('textarea')?.focus({ preventScroll: true })
+}
 
 /** One pending action at a time, with its error. */
 function useAction() {
@@ -268,9 +276,7 @@ export function LpChecklistPanel({
     })
   }
 
-  // The discount guide can be written straight from its checklist row.
   const hasGuide = !!p.shopify_coupon_code?.trim()
-  const [guideOpen, setGuideOpen] = useState(false)
 
   if (!building) {
     const bypassed = step !== null && (!submission || submission.bypassed)
@@ -332,8 +338,9 @@ export function LpChecklistPanel({
                   on={on}
                   disabled={disabled || pending}
                   // Ticked via "no discount": the box unticks that. Not ticked:
-                  // it opens the guide editor right here.
-                  onClick={() => (noDiscount ? toggle(NO_DISCOUNT_KEY, false) : setGuideOpen(v => !v))}
+                  // it takes you to the guide editor in Final output — the only
+                  // one, so the guide is never being edited in two places.
+                  onClick={() => (noDiscount ? toggle(NO_DISCOUNT_KEY, false) : goToGuideEditor())}
                   label={noDiscount ? 'Untick "This page has no discount"' : 'Write the discount setup guide'}
                 />
           } else {
@@ -363,28 +370,21 @@ export function LpChecklistPanel({
                   <button type="button" onClick={() => scrollToId('page')} style={{ ...linkBtn, marginTop: 4 }}>Go to Final output ↑</button>
                 )}
                 {row.key === 'discount_guide' && !hasGuide && !disabled && (
-                  <>
-                    {guideOpen && !noDiscount && (
-                      <div style={{ marginTop: 8 }}>
-                        {/* The same editor as in Final output, writing the same
-                            column — saving it ticks this row. */}
-                        <FinalOutputField field="shopify_coupon_code" projectId={p.id} brandId={p.brand_id} currentValue={null} />
-                      </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+                    {!noDiscount && (
+                      <>
+                        <button type="button" className="btn-secondary btn-sm" onClick={goToGuideEditor}>Write the guide ↑</button>
+                        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>or</span>
+                      </>
                     )}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
-                      {!noDiscount && !guideOpen && (
-                        <button type="button" className="btn-secondary btn-sm" onClick={() => setGuideOpen(true)}>Write the guide</button>
-                      )}
-                      {!noDiscount && !guideOpen && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>or</span>}
-                      <Tick
-                        on={noDiscount}
-                        disabled={pending}
-                        onClick={() => toggle(NO_DISCOUNT_KEY, !noDiscount)}
-                        label="This page has no discount"
-                      />
-                      <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>This page has no discount</span>
-                    </div>
-                  </>
+                    <Tick
+                      on={noDiscount}
+                      disabled={pending}
+                      onClick={() => toggle(NO_DISCOUNT_KEY, !noDiscount)}
+                      label="This page has no discount"
+                    />
+                    <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>This page has no discount</span>
+                  </div>
                 )}
               </div>
             </li>
@@ -489,12 +489,14 @@ export function LpInternalReviewPanel({
       {canWrite && (
         <form onSubmit={submitNote} style={{ marginBottom: 18, padding: 12, borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface-2)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
-            <label style={{ fontSize: 11, color: 'var(--text-muted)' }} htmlFor="lp-note-section">Section</label>
+            {/* margin/width reset: the global label and select styles assume a
+                stacked form field, not an inline row. */}
+            <label style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0 }} htmlFor="lp-note-section">Section</label>
             <select
               id="lp-note-section"
               value={section}
               onChange={e => setSection(e.target.value)}
-              style={{ fontSize: 12, padding: '5px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface-1)', color: 'var(--text-primary)' }}
+              style={{ width: 'auto', fontSize: 12, padding: '5px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface-1)', color: 'var(--text-primary)' }}
             >
               {LP_SECTIONS.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
@@ -623,22 +625,29 @@ export function LpDiscountPanel({
   const [editing, setEditing] = useState(!discount)
   const [mode, setMode] = useState<LpDiscountMode>(discount?.mode ?? (noDiscountTicked ? 'none' : 'team'))
   const [note, setNote] = useState(discount?.note ?? '')
-  const guide = p.shopify_coupon_code?.trim()
+  // The guide itself lives in Final output; repeating it here put the same
+  // twenty lines on screen twice. One line to recognise it, and a jump to it.
+  const guideFirstLine = p.shopify_coupon_code?.split('\n').find(l => l.trim())?.trim() ?? null
 
   return (
     <div>
-      <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>From the team&apos;s setup guide</div>
-      {guide ? (
-        <div style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--text-primary)', whiteSpace: 'pre-wrap', padding: '10px 14px', borderRadius: 8, background: 'var(--surface-2)', border: '1px solid var(--border)', maxWidth: '80ch' }}>
-          {guide}
-        </div>
-      ) : (
-        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-          {noDiscountTicked ? 'The team marked this page as having no discount.' : 'No setup guide was written.'}
-        </div>
-      )}
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, minWidth: 0 }}>
+        <span style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', flexShrink: 0 }}>Setup guide</span>
+        {guideFirstLine ? (
+          <>
+            <span style={{ fontSize: 13, color: 'var(--text-secondary)', minWidth: 0, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {guideFirstLine}
+            </span>
+            <button type="button" onClick={() => scrollToId('discount-guide')} style={{ ...linkBtn, flexShrink: 0 }}>View full guide ↑</button>
+          </>
+        ) : (
+          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+            {noDiscountTicked ? 'The team marked this page as having no discount.' : 'No setup guide was written.'}
+          </span>
+        )}
+      </div>
 
-      <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
+      <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
         {!editing && discount ? (
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap' }}>
             <Check size={16} strokeWidth={3} aria-hidden style={{ color: 'var(--success)', marginTop: 2 }} />
@@ -655,22 +664,44 @@ export function LpDiscountPanel({
           <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>No discount recorded.</div>
         ) : (
           <form onSubmit={e => { e.preventDefault(); run(() => recordLpDiscount(p.id, p.brand_id, mode, note), () => setEditing(false)) }}>
-            <fieldset style={{ border: 'none', margin: 0, padding: 0, display: 'grid', gap: 8 }}>
-              <legend style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>How was the discount set up?</legend>
-              {(Object.keys(LP_DISCOUNT_LABELS) as LpDiscountMode[]).map(m => (
-                <label key={m} style={{
-                  display: 'flex', gap: 10, alignItems: 'flex-start', cursor: 'pointer', padding: '9px 12px', borderRadius: 8,
-                  border: `1px solid ${mode === m ? 'var(--accent)' : 'var(--border)'}`,
-                  background: mode === m ? 'var(--accent-muted)' : 'transparent',
-                }}>
-                  <input type="radio" name="lp-discount-mode" value={m} checked={mode === m} onChange={() => setMode(m)} style={{ marginTop: 3 }} />
-                  <span>
-                    <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{LP_DISCOUNT_LABELS[m]}</span>
-                    <span style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)' }}>{DISCOUNT_HELP[m]}</span>
-                  </span>
-                </label>
-              ))}
-            </fieldset>
+            <div id="lp-discount-mode-label" style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>How was the discount set up?</div>
+            {/* Buttons acting as radios, not <label><input type="radio">: the
+                app's global label (uppercase, block) and input (full width)
+                styles turned those into shouting text with the dot floating
+                mid-row. */}
+            <div role="radiogroup" aria-labelledby="lp-discount-mode-label" style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+              {(Object.keys(LP_DISCOUNT_LABELS) as LpDiscountMode[]).map(m => {
+                const selected = mode === m
+                return (
+                  <button
+                    key={m}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    onClick={() => setMode(m)}
+                    style={{
+                      display: 'flex', gap: 10, alignItems: 'flex-start', textAlign: 'left', width: '100%',
+                      cursor: 'pointer', padding: '10px 12px', borderRadius: 8, font: 'inherit',
+                      border: `1px solid ${selected ? 'var(--accent)' : 'var(--border)'}`,
+                      background: selected ? 'var(--accent-muted)' : 'transparent',
+                      color: 'var(--text-primary)',
+                    }}
+                  >
+                    <span aria-hidden style={{
+                      width: 16, height: 16, borderRadius: '50%', flexShrink: 0, marginTop: 1,
+                      border: `2px solid ${selected ? 'var(--accent)' : 'var(--border-strong)'}`,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      {selected && <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--accent)' }} />}
+                    </span>
+                    <span style={{ minWidth: 0 }}>
+                      <span style={{ display: 'block', fontSize: 13, fontWeight: 600 }}>{LP_DISCOUNT_LABELS[m]}</span>
+                      <span style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginTop: 2, lineHeight: 1.45 }}>{DISCOUNT_HELP[m]}</span>
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
             <textarea
               value={note}
               onChange={e => setNote(e.target.value)}

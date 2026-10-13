@@ -189,9 +189,12 @@ export default function LpLiquidFiles({
       )}
 
       {!hasUrl && reason && !disabled && (
+        // textTransform/letterSpacing/weight reset: the global label style is
+        // for uppercase field captions, not a drop target's sentence.
         <label style={{
           display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', marginBottom: 10, borderRadius: 8,
           border: '1px dashed var(--border-strong)', fontSize: 12, color: 'var(--text-secondary)',
+          textTransform: 'none', letterSpacing: 0, fontWeight: 400,
           cursor: busy ? 'wait' : 'pointer',
         }}>
           <input
