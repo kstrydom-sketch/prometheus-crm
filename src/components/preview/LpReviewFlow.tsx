@@ -277,25 +277,66 @@ export function LpChecklistPanel({
   }
 
   const hasGuide = !!p.shopify_coupon_code?.trim()
+  const [showChecks, setShowChecks] = useState(false)
 
   if (!building) {
     const bypassed = step !== null && (!submission || submission.bypassed)
+    if (bypassed) {
+      return (
+        <div style={{ padding: '10px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: 'var(--urgent-soon-bg)', color: 'var(--urgent-soon)', border: '1px solid var(--urgent-soon)' }}>
+          This page reached Internal Review without the checklist — moved on the stage rail, or before the checklist existed.
+        </div>
+      )
+    }
+    if (!submission) {
+      return (
+        <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+          Not open right now. It opens whenever the page is being built or fixed.
+        </div>
+      )
+    }
+
+    // A status row, not a sentence with an icon in it: Tailwind's preflight
+    // makes every svg display:block, so an icon inline in text sat on a line
+    // of its own above the words.
+    const all = checklist.done === checklist.total
+    const confirmed = checklist.rows.filter(r => r.done)
     return (
-      <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-        {bypassed ? (
-          <div style={{ padding: '10px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: 'var(--urgent-soon-bg)', color: 'var(--urgent-soon)', border: '1px solid var(--urgent-soon)' }}>
-            This page reached Internal Review without the checklist — moved on the stage rail, or before the checklist existed.
+      <div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <span aria-hidden style={{
+            width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            background: all ? 'color-mix(in srgb, var(--success) 16%, transparent)' : 'var(--urgent-soon-bg)',
+            color: all ? 'var(--success)' : 'var(--urgent-soon)',
+          }}><Check size={15} strokeWidth={3} /></span>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
+              {all ? `All ${checklist.total} checks confirmed` : `${checklist.done} of ${checklist.total} checks confirmed`}
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+              Submitted by {submission.by} · {fmt(submission.at)}
+            </div>
           </div>
-        ) : submission ? (
-          <>
-            <Check size={13} strokeWidth={3} aria-hidden style={{ color: 'var(--success)', verticalAlign: '-2px', marginRight: 6 }} />
-            Submitted by <strong style={{ color: 'var(--text-primary)' }}>{submission.by}</strong> on {fmt(submission.at)}, with all {checklist.total} checks
-            {submission.deliverable === 'liquid' ? ' — handed in as Liquid files.' : '.'}
-          </>
-        ) : (
-          <span style={{ color: 'var(--text-muted)' }}>
-            Not open right now. It opens whenever the page is being built or fixed.
-          </span>
+          <span style={{
+            fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 999, flexShrink: 0,
+            border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-secondary)',
+          }}>{submission.deliverable === 'liquid' ? 'Liquid files' : 'Live URL'}</span>
+          <button type="button" onClick={() => setShowChecks(v => !v)} aria-expanded={showChecks} style={{ ...linkBtn, flexShrink: 0 }}>
+            {showChecks ? 'Hide checks' : 'Show checks'}
+          </button>
+        </div>
+
+        {showChecks && (
+          <ul style={{ listStyle: 'none', margin: '12px 0 0', padding: '4px 0 0 40px', display: 'grid', gap: 6 }}>
+            {confirmed.map(r => (
+              <li key={r.key} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: 'var(--text-secondary)' }}>
+                <Check size={12} strokeWidth={3} aria-hidden style={{ color: 'var(--success)', flexShrink: 0 }} />
+                <span style={{ flex: 1, minWidth: 0 }}>{r.label}</span>
+                {r.check && <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>{r.check.by} · {fmt(r.check.at)}</span>}
+              </li>
+            ))}
+          </ul>
         )}
       </div>
     )
