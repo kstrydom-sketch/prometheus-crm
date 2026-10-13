@@ -22,6 +22,7 @@ export default function FeedbackComment({
   pin,
   pinned = pin != null,
   pinHref,
+  showAttachments = false,
 }: {
   comment: ProjectComment
   projectId: string
@@ -34,6 +35,8 @@ export default function FeedbackComment({
   /** Opens the client review link with this pin selected and scrolled into
    *  view — the only way for the team to see WHERE on the page it points. */
   pinHref?: string
+  /** Render the comment's screenshots (internal LP review notes carry them). */
+  showAttachments?: boolean
 }) {
   const router = useRouter()
   const toast = useToast()
@@ -133,6 +136,17 @@ export default function FeedbackComment({
       }}>
         {comment.content}
       </p>
+      {showAttachments && !!comment.attachment_urls?.length && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+          {comment.attachment_urls.map((url, i) => (
+            <a key={url} href={url} target="_blank" rel="noreferrer" title="Open full size">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={url} alt={`Screenshot ${i + 1}`} loading="lazy" decoding="async"
+                style={{ width: 88, height: 66, objectFit: 'cover', borderRadius: 6, border: '1px solid var(--border)', display: 'block' }} />
+            </a>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

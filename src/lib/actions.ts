@@ -251,6 +251,28 @@ async function assertCreativesSendable(
   }
 }
 
+// The LP review flow's sub-step and submission (lib/lp-review.ts) describe only
+// the current stay in Internal Review, so they are cleared whenever the LP
+// track is anywhere else. Conditional on the stage AFTER the write: moving a
+// card whose LP is already in Internal Review keeps its sub-step. Best-effort —
+// before 20261013_add_lp_review_flow.sql runs the columns do not exist (42703
+// from Postgres, PGRST204 from PostgREST's schema cache), and that must never
+// fail the stage move it follows.
+async function settleLpReviewState(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  projectId: string,
+) {
+  const { error } = await supabase
+    .from('projects')
+    .update({ lp_internal_step: null, lp_submission: null })
+    .eq('id', projectId)
+    .neq('lp_stage', 'internal_review')
+    .or('lp_internal_step.not.is.null,lp_submission.not.is.null')
+  if (error && error.code !== '42703' && error.code !== 'PGRST204') {
+    console.error('[settleLpReviewState]', error.message)
+  }
+}
+
 export async function updateProjectStage(
   projectId: string,
   brandId: string,
@@ -276,6 +298,8 @@ export async function updateProjectStage(
     .from('projects')
     .update({ [track]: stage })
     .eq('id', projectId)
+
+  if (!error && track === 'lp_stage') await settleLpReviewState(supabase, projectId)
 
   if (!error && prev && prev[track] !== stage) {
     const actor = actorFromUser(user)
@@ -371,6 +395,8 @@ export async function updateProjectStagesBoth(
     .from('projects')
     .update({ lp_stage: stage, creatives_stage: stage })
     .eq('id', projectId)
+
+  if (!error) await settleLpReviewState(supabase, projectId)
 
   if (!error && prev) {
     await logEvents(bothTrackStageEvents(projectId, brandId, prev, stage, actorFromUser(user)))
@@ -527,6 +553,7 @@ export async function markProjectComplete(projectId: string, brandId: string) {
     .eq('id', projectId)
 
   if (error) throw new Error(error.message)
+  await settleLpReviewState(supabase, projectId)
 
   if (prev) {
     await logEvents(bothTrackStageEvents(projectId, brandId, prev, 'live', actorFromUser(user)))

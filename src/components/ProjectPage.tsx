@@ -8,6 +8,7 @@ import type { TrackedCampaign, LpTracking, FunnelDailyRow, LpAdMatch } from '@/l
 import type { Project, Brand, CreativeAsset, ProjectComment, BrandDna, ProjectImage, Journey, BrandComment, BrandDocument, ProjectBrief } from '@/lib/types'
 import PreviewProjectView, { type BrandLandingPage } from '@/components/preview/PreviewProjectView'
 import type { LpBriefSourceOffer } from '@/lib/markdown-export'
+import type { LpLiquidFile } from '@/lib/lp-review'
 
 // PREVIEW ROUTE — deliberately not in the sidebar nav.
 //
@@ -54,6 +55,7 @@ export default async function ProjectPage({ projectId }: { projectId: string }) 
     { data: brandDocumentsRaw },
     { data: projectBriefsRaw },
     { data: sourceOfferRaw },
+    { data: liquidFilesRaw },
     profiles,
   ] = await Promise.all([
     supabase.from('brands').select('id, name, website, brand_notes, ai_sensitivity, brand_guidelines, growth_strategist, profit_engineer').eq('id', p.brand_id).single(),
@@ -114,6 +116,14 @@ export default async function ProjectPage({ projectId }: { projectId: string }) 
     p.source_offer_card_id
       ? supabase.from('offer_cards').select('problem_statement, success_metric, success_target, guardrails').eq('id', p.source_offer_card_id).maybeSingle()
       : Promise.resolve({ data: null }),
+    // Liquid files handed in for the landing page (no store access). Tolerant
+    // of 20261013_add_lp_review_flow.sql not having run: an error is an empty
+    // list, never a crashed page.
+    supabase
+      .from('lp_liquid_files')
+      .select('*')
+      .eq('project_id', projectId)
+      .order('created_at', { ascending: true }),
     getCachedProfiles(),
   ])
 
@@ -208,6 +218,7 @@ export default async function ProjectPage({ projectId }: { projectId: string }) 
       nowMs={nowMs}
       brandAdAccount={brandAdAccount}
       sourceOffer={(sourceOfferRaw ?? null) as LpBriefSourceOffer | null}
+      liquidFiles={(liquidFilesRaw ?? []) as LpLiquidFile[]}
     />
   )
 }

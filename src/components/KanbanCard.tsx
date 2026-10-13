@@ -8,6 +8,7 @@ import { CSS } from '@dnd-kit/utilities'
 import { STAGE_ORDER, STAGE_LABELS, profileName, type Stage, type Project, type Profile } from '@/lib/types'
 import { isProjectOverdue, parseAndDaysUntil, parseDueDate, phaseDueTone, STAGE_COLORS, STAGE_DUE_FIELD, type PhaseDueTone } from '@/lib/stageColors'
 import { updateProjectStageDueDate, updateProjectEditor } from '@/lib/actions'
+import { lpStageDisplay } from '@/lib/lp-review'
 import Avatar from '@/components/Avatar'
 import { ChevronLeft, ChevronRight, GripVertical, AlertTriangle, Check, Hourglass, UserPlus, X, Star } from 'lucide-react'
 
@@ -227,7 +228,7 @@ function KanbanCardInner({ p, isGhost = false, columnStage, onMove, editorsById,
 
           {/* Track pills */}
           <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-            <TrackBadge label="LP" stage={p.lp_stage} approved={p.lp_approved} />
+            <TrackBadge label="LP" stage={p.lp_stage} approved={p.lp_approved} lpStep={p.lp_internal_step} />
             <TrackBadge label="CR" stage={p.creatives_stage} approved={p.creatives_approved} />
           </div>
 
@@ -654,8 +655,15 @@ function RocketIcon() {
   )
 }
 
-function TrackBadge({ label, stage, approved }: { label: string; stage: Stage; approved: boolean }) {
-  const color = STAGE_COLORS[stage]
+function TrackBadge({ label, stage, approved, lpStep }: {
+  label: string
+  stage: Stage
+  approved: boolean
+  /** LP only: names the review sub-step (Internal Revisions, Discount Creation). */
+  lpStep?: string | null
+}) {
+  const display = lpStep !== undefined ? lpStageDisplay(stage, lpStep) : { label: STAGE_LABELS[stage], colors: STAGE_COLORS[stage] }
+  const color = display.colors
   const inReview = stage === 'client_review'
   return (
     <span
@@ -670,7 +678,7 @@ function TrackBadge({ label, stage, approved }: { label: string; stage: Stage; a
       }}
     >
       <span aria-hidden style={{ width: 5, height: 5, borderRadius: '50%', background: color.border, flexShrink: 0 }} />
-      {label} · {STAGE_LABELS[stage]}
+      {label} · {display.label}
       {inReview && (approved ? <Check size={10} strokeWidth={2.5} aria-hidden /> : <Hourglass size={10} strokeWidth={2} aria-hidden />)}
     </span>
   )

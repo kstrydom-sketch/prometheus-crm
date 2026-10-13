@@ -35,7 +35,12 @@ import ProductGroupEditor from '@/components/preview/ProductGroupEditor'
 import CopyApprovalDeck from '@/components/preview/CopyApprovalDeck'
 import BrandBrief from '@/components/preview/BrandBrief'
 import DriveSyncBar from '@/components/preview/DriveSyncBar'
-import NextStep from '@/components/preview/NextStep'
+import { LpNextStep, LpChecklistPanel, LpInternalReviewPanel, LpDiscountPanel } from '@/components/preview/LpReviewFlow'
+import LpLiquidFiles from '@/components/preview/LpLiquidFiles'
+import {
+  LP_INTERNAL_REVIEWER, NO_DISCOUNT_KEY, evaluateLpChecklist, lpIsBuilding, lpStageDisplay, lpStepOf,
+  readLpDiscount, readLpSubmission, type LpLiquidFile,
+} from '@/lib/lp-review'
 import BrandGuidelines from '@/components/preview/BrandGuidelines'
 import BrandThread from '@/components/preview/BrandThread'
 import BrandLogo from '@/components/preview/BrandLogo'
@@ -360,7 +365,7 @@ function CommentList({ comments, empty }: { comments: ProjectComment[]; empty: s
 
 export default function PreviewProjectView({
   project: p, brand, assets, comments, images, dna, revisionsByAsset, lpEditorName, creativeEditorName, journeyName, journeys, profiles, campaigns, todayIso, authorName, brandLandingPages, brandComments, brandDocuments, projectBriefs, serverNow, currentUserId,
-  lpTracking, lpAdMatches, lpDaily, accountDaily, nowMs, brandAdAccount, sourceOffer = null,
+  lpTracking, lpAdMatches, lpDaily, accountDaily, nowMs, brandAdAccount, sourceOffer = null, liquidFiles = [],
 }: {
   project: Project; brand: Brand; assets: CreativeAsset[]; comments: ProjectComment[]
   images: ProjectImage[]; dna: BrandDna | null
@@ -386,6 +391,8 @@ export default function PreviewProjectView({
   brandAdAccount: string | null
   /** Rationale fields from the source offer card, for the LP brief export. Null when the card has no linked offer. */
   sourceOffer?: LpBriefSourceOffer | null
+  /** Liquid files handed in for the landing page (no store access). */
+  liquidFiles?: LpLiquidFile[]
 }) {
   const [tab, setTab] = useState<Tab>('overview')
 
@@ -448,6 +455,7 @@ export default function PreviewProjectView({
     const owner: Record<string, Tab> = {
       'client-feedback': 'lp', feedback: 'lp', page: 'lp', offer: 'lp', copy: 'lp',
       library: 'lp', notes: 'lp', product: 'lp',
+      checklist: 'lp', 'internal-review': 'lp', discount: 'lp',
       brief: 'creatives', 'creative-offer': 'creatives', brand: 'creatives', products: 'creatives',
       motion: 'creatives', 'creative-brief': 'creatives', 'creative-copy': 'creatives', review: 'creatives',
       making: 'overview', about: 'overview', look: 'overview', destination: 'overview',
@@ -475,7 +483,14 @@ export default function PreviewProjectView({
     // 'general' is addProjectComment's DEFAULT track and CommentForm passes no
     // track at all, so excluding it means the first comment posted through that
     // form disappears. Zero rows use it today; that is luck, not safety.
-    () => comments.filter(c => c.track === 'lp' || c.track === 'general'),
+    // Client-only: internal LP review notes share track 'lp' and have their own
+    // card, so they must not inflate the client feedback counts.
+    () => comments.filter(c => (c.track === 'lp' || c.track === 'general') && c.audience !== 'internal'),
+    [comments],
+  )
+  // The internal review's notes on the page — see lib/lp-review.ts.
+  const lpInternalFeedback = useMemo(
+    () => comments.filter(c => c.track === 'lp' && c.audience === 'internal'),
     [comments],
   )
   const noteComments = useMemo(() => comments.filter(c => c.track === 'note'), [comments])
@@ -577,6 +592,17 @@ export default function PreviewProjectView({
 
   const lpOpen = useMemo(() => lpComments.filter(c => !c.resolved_at), [lpComments])
   const lpResolved = useMemo(() => lpComments.filter(c => !!c.resolved_at), [lpComments])
+
+  // LP review flow: checklist → internal review → internal revisions →
+  // discount creation → client review. See lib/lp-review.ts.
+  const lpStep = lpStepOf(p.lp_stage, p.lp_internal_step)
+  const lpBuilding = lpIsBuilding(p.lp_stage, p.lp_internal_step)
+  const lpChecklist = useMemo(() => evaluateLpChecklist(p, liquidFiles.length), [p, liquidFiles.length])
+  const lpSubmission = useMemo(() => readLpSubmission(p.lp_submission), [p.lp_submission])
+  const lpDiscount = useMemo(() => readLpDiscount(p.lp_discount), [p.lp_discount])
+  const lpInternalOpen = lpInternalFeedback.filter(c => !c.resolved_at).length
+  const showLpInternal = lpStep !== null || lpInternalFeedback.length > 0
+  const showLpDiscount = lpStep === 'discount' || lpDiscount !== null
   const hasProduct = !!(p.product_featured || p.product_description || images.length)
   const lockedAt = p.offer_locked_at
     ? new Date(p.offer_locked_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
@@ -592,13 +618,16 @@ export default function PreviewProjectView({
 
   const lpNav = useMemo(() => ([
     { id: 'page', label: 'Final output', show: true },
+    { id: 'checklist', label: lpBuilding ? `Checklist · ${lpChecklist.done}/${lpChecklist.total}` : 'Checklist', show: true },
+    { id: 'internal-review', label: lpInternalOpen ? `Internal review · ${lpInternalOpen} open` : 'Internal review', show: showLpInternal },
+    { id: 'discount', label: 'Discount creation', show: showLpDiscount },
     { id: 'library', label: brandLandingPages.length ? `Past pages · ${brandLandingPages.length}` : 'Past pages', show: brandLandingPages.length > 1 },
     { id: 'offer', label: 'The offer', show: true },
     { id: 'copy', label: 'Page copy', show: true },
     { id: 'product', label: 'Product', show: hasProduct },
     { id: 'feedback', label: lpOpen.length ? `Client feedback · ${lpOpen.length} open` : 'Client feedback', show: lpComments.length > 0 },
     { id: 'notes', label: 'Internal notes', show: true },
-  ]).filter(n => n.show), [hasProduct, lpOpen.length, lpComments.length, noteComments.length, brandLandingPages.length])
+  ]).filter(n => n.show), [hasProduct, lpOpen.length, lpComments.length, noteComments.length, brandLandingPages.length, lpBuilding, lpChecklist.done, lpChecklist.total, lpInternalOpen, showLpInternal, showLpDiscount])
 
   // Products and Motion reports are always shown, even empty: an empty list is
   // the prompt to fill it, and hiding it hides the only place the work happens.
@@ -839,10 +868,14 @@ export default function PreviewProjectView({
             {groupLabel('Status')}
             {([['LP', p.lp_stage], ['CRE', p.creatives_stage]] as const).map(([k, st]) => {
               const norm = normalizeStage(st)
-              const c = STAGE_COLORS[norm]
+              // The LP track names its review sub-step (Internal Revisions,
+              // Discount Creation) instead of the stage it sits inside.
+              const { label, colors: c } = k === 'LP'
+                ? lpStageDisplay(st, p.lp_internal_step)
+                : { label: STAGE_LABELS[norm], colors: STAGE_COLORS[norm] }
               return (
                 <span key={k} style={{ fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 999, background: c.bg, color: c.text }}>
-                  {k} · {STAGE_LABELS[norm]}
+                  {k} · {label}
                 </span>
               )
             })}
@@ -1389,10 +1422,12 @@ export default function PreviewProjectView({
 
           {tab === 'lp' && (
             <>
-              <NextStep
-                projectId={p.id} brandId={p.brand_id}
-                track="lp_stage" stage={p.lp_stage}
-                label="Landing page" disabled={p.is_complete}
+              <LpNextStep
+                project={p}
+                checklist={lpChecklist}
+                openInternal={lpInternalOpen}
+                discount={lpDiscount}
+                disabled={p.is_complete}
               />
 
               {/* Build-state, above the first card and deliberately not a card:
@@ -1475,7 +1510,11 @@ export default function PreviewProjectView({
                   </div>
                 ) : (
                   <>
-                    <Missing tone="muted">No page yet. This is a build, not a revision.</Missing>
+                    <Missing tone="muted">
+                      {lpChecklist.deliverable === 'liquid'
+                        ? 'No URL — handed in as Liquid files below (no store access).'
+                        : 'No page yet. This is a build, not a revision.'}
+                    </Missing>
                     {/* The submit box, right where the absence is announced. It
                         used to live only inside Edit details, which nobody
                         looked in for "where do I hand in the page". */}
@@ -1486,6 +1525,17 @@ export default function PreviewProjectView({
                     )}
                   </>
                 )}
+
+                {/* Last resort when we cannot get into the client's store. Not
+                    offered once there is a URL. */}
+                <LpLiquidFiles
+                  projectId={p.id}
+                  brandId={p.brand_id}
+                  lpUrl={p.lp_url}
+                  reason={p.lp_liquid_reason ?? null}
+                  files={liquidFiles}
+                  disabled={p.is_complete}
+                />
 
                 {p.lp_url && (
                   <div style={{ fontSize: 12, marginTop: 12 }}>
@@ -1543,6 +1593,50 @@ export default function PreviewProjectView({
                 )}
 
               </Card>
+
+              {/* 2 — the review flow, in the order the page goes through it:
+                  the team's checklist, the internal review, the discount. */}
+              <Card
+                id="checklist"
+                title="Pre-submission checklist"
+                purpose={lpBuilding
+                  ? 'Everything here must be done before the page can be submitted. Re-done for every submission.'
+                  : 'Confirmed by the team when the page was submitted.'}
+              >
+                <LpChecklistPanel project={p} checklist={lpChecklist} submission={lpSubmission} disabled={p.is_complete} />
+              </Card>
+
+              {showLpInternal && (
+                <Card
+                  id="internal-review"
+                  title="Internal review"
+                  purpose={`${LP_INTERNAL_REVIEWER} reviews the page and leaves notes. The team ticks each one off once it is fixed. Never shown to the client.`}
+                >
+                  <LpInternalReviewPanel
+                    project={p}
+                    feedback={lpInternalFeedback}
+                    submission={lpSubmission}
+                    disabled={p.is_complete}
+                  />
+                </Card>
+              )}
+
+              {showLpDiscount && (
+                <Card
+                  id="discount"
+                  title="Discount creation"
+                  purpose={`${LP_INTERNAL_REVIEWER} creates the discount from the setup guide — or the client does, when we have no access. Recorded before the page goes to the client.`}
+                >
+                  <LpDiscountPanel
+                    project={p}
+                    discount={lpDiscount}
+                    // The tick moves into the submission when the page is
+                    // submitted, so look in both.
+                    noDiscountTicked={!!lpChecklist.rows.find(r => r.key === 'discount_guide')?.check || !!lpSubmission?.checks.includes(NO_DISCOUNT_KEY)}
+                    disabled={p.is_complete}
+                  />
+                </Card>
+              )}
 
               {/* Every page built for this brand, so an LP editor can open what
                   was done last time instead of asking. Only when there is more

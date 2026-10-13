@@ -265,6 +265,14 @@ export interface Project {
   lp_url: string | null
   creatives_notes: string | null
   shopify_coupon_code: string | null
+  // LP review flow (20261013_add_lp_review_flow.sql). Optional so a DB
+  // predating the migration reads as undefined. The JSONB columns are read
+  // through lib/lp-review.ts, never used raw.
+  lp_internal_step?: 'review' | 'revisions' | 'discount' | null
+  lp_checklist?: unknown
+  lp_submission?: unknown
+  lp_discount?: unknown
+  lp_liquid_reason?: string | null
   /** "Push to client" for the Results tab — the client review link renders the
    *  results section only when true. Optional so a DB predating the 20260915
    *  migration reads as undefined (treated as false), not as a crash. */

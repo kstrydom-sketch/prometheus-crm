@@ -17,10 +17,10 @@ export default async function PipelinePage() {
   // JSONB copy banks + brief fields for every active project (~110 KB vs ~7 KB
   // measured) on every board load.
   const COLS = 'id, name, brand_id, due_date, stage_brief_due_date, stage_in_progress_due_date, stage_internal_review_due_date, stage_client_review_due_date, is_complete, lp_stage, creatives_stage, lp_approved, creatives_approved, lp_editor_id, creative_editor_id, moment_code'
-  const fetchPipeline = (brandCols: string) =>
+  const fetchPipeline = (brandCols: string, lpStep = true) =>
     supabase
       .from('projects')
-      .select(`${COLS}, brands(${brandCols})`)
+      .select(`${COLS}${lpStep ? ', lp_internal_step' : ''}, brands(${brandCols})`)
       .eq('is_complete', false)
       .order('due_date', { ascending: true })
 
@@ -28,10 +28,15 @@ export default async function PipelinePage() {
     fetchPipeline('id, name, is_priority'),
     getCachedProfiles(),
   ])
-  // brands.is_priority arrives with a hand-run migration (repo convention) —
-  // 42703 = column doesn't exist yet, so fall back rather than break the board.
+  // brands.is_priority and projects.lp_internal_step (the LP card's review
+  // sub-step) arrive with hand-run migrations (repo convention) — 42703 =
+  // column doesn't exist yet, so fall back rather than break the board. The
+  // newest column is dropped first.
   if (pipelineErr?.code === '42703') {
-    ;({ data: pipelineRaw } = await fetchPipeline('id, name'))
+    ;({ data: pipelineRaw, error: pipelineErr } = await fetchPipeline('id, name, is_priority', false))
+  }
+  if (pipelineErr?.code === '42703') {
+    ;({ data: pipelineRaw } = await fetchPipeline('id, name', false))
   }
 
   const pipeline = (pipelineRaw ?? []) as unknown as PipelineProject[]
