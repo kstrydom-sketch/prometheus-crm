@@ -95,7 +95,7 @@ create policy "brand_documents_rw_auth" on public.brand_documents
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values (
   'brand-docs', 'brand-docs', false,
-  52428800,  -- 50MB (was 40MB; raised 15 Sep). The only ceiling a forged client cannot talk its way past.
+  104857600, -- 100MB (40MB -> 50MB 15 Sep -> 100MB 15 Oct, for PDFs). The only ceiling a forged client cannot talk its way past.
   array[
     'application/pdf',
     'text/plain',

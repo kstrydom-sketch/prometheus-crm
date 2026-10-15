@@ -35,15 +35,21 @@ export const BRAND_DOC_ACCEPT = [
   ...Object.keys(BRAND_DOC_TYPES),
 ].join(',')
 
-// 50MB (raised from 40MB, 15 Sep). Brand books run 5-50MB, so 40 was turning
-// away real ones. MUST match the brand-docs bucket's file_size_limit — the
-// bucket is the ceiling a forged request cannot talk past, and this constant is
-// only what lets the browser say so before a 50MB upload starts. Raise one
-// without the other and the check lies in one direction or the other.
+// PDFs up to 100MB (raised 15 Oct): print-ready brand books with full-bleed
+// photography pass 50MB, and a PDF is the format the team reads in place. Other
+// types stay at 50MB.
 //
-// Verified against the live project: 49.5MB uploads, 50.5MB is refused, so the
-// Supabase project-wide upload cap is not lower than this.
+// The brand-docs bucket's file_size_limit is 100MB — the ceiling a forged
+// request cannot talk past — and Supabase's project-wide upload limit
+// (Dashboard -> Project Settings -> Storage) must be at least that, or every
+// file over 50MB is refused AFTER uploading in full. These constants only let
+// the browser say so before an upload starts.
 export const MAX_BRAND_DOC_BYTES = 50 * 1024 * 1024
+export const MAX_BRAND_PDF_BYTES = 100 * 1024 * 1024
+
+/** The size limit for one file of this type. */
+export const maxBrandDocBytes = (contentType: string): number =>
+  contentType === 'application/pdf' ? MAX_BRAND_PDF_BYTES : MAX_BRAND_DOC_BYTES
 
 const BY_EXT: Record<string, string> = Object.fromEntries(
   Object.entries(BRAND_DOC_TYPES).map(([mime, spec]) => [spec.ext, mime]),
