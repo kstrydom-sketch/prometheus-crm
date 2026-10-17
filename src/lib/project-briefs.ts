@@ -34,8 +34,11 @@ export const resolveBriefType = (file: { name: string; type: string }): string |
 export const safeBriefName = (raw: string, contentType: string): string =>
   safeDocNameIn(BRIEF_TYPES, raw, contentType)
 
-// MUST equal the project-briefs bucket's file_size_limit (52428800).
-export const MAX_BRIEF_BYTES = 50 * MB
+// MUST equal the project-briefs bucket's file_size_limit (262144000).
+export const MAX_BRIEF_BYTES = 250 * MB
+// Gemini reads a PDF of at most 50MB. A bigger one is stored and viewable, but
+// the AI read fails fast with a message instead of after a 265s upload attempt.
+export const MAX_AI_READ_PDF_BYTES = 50 * MB
 export const MAX_BRIEF_IMAGES = 40        // pictures pulled from a PPTX/DOCX
 export const MAX_PDF_PREVIEW_PAGES = 40   // pages drawn from a PDF
 export const IMAGE_FULL_PX = 1600

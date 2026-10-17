@@ -1,6 +1,6 @@
 import type { createClient } from '@/lib/supabase/server'
 import {
-  BRIEF_BUCKET, BRIEF_MODEL, MAX_BRIEF_IMAGES,
+  BRIEF_BUCKET, BRIEF_MODEL, MAX_AI_READ_PDF_BYTES, MAX_BRIEF_IMAGES,
   briefImagePath, briefIsEmpty, markVerbatim, normalizeBriefExtraction,
   type BriefImage,
 } from '@/lib/project-briefs'
@@ -49,6 +49,9 @@ export async function runBriefRead(supabase: Db, brief: ClaimedBrief): Promise<v
     const { data: blob, error: dlErr } = await supabase.storage.from(BRIEF_BUCKET).download(brief.storage_path)
     if (dlErr || !blob) throw new BriefReadError(`Could not fetch the file from storage${dlErr ? `: ${dlErr.message}` : ''}.`)
     const buf = Buffer.from(await blob.arrayBuffer())
+    if (isPdf && buf.length > MAX_AI_READ_PDF_BYTES) {
+      throw new BriefReadError(`This PDF is ${(buf.length / 1048576).toFixed(0)}MB. It is saved and viewable here, but the AI can only read PDFs up to ${MAX_AI_READ_PDF_BYTES / 1048576}MB. Upload a lighter export (compress the images) to get the AI read.`)
+    }
     // Only changes the WORDING of a failure. Permission-only encryption (no
     // open password) reads fine, so this must never block the read.
     encrypted = isPdf && buf.includes('/Encrypt')

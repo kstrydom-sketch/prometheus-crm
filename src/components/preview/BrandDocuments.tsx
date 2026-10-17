@@ -9,7 +9,7 @@ import {
 } from '@/lib/actions'
 import {
   BRAND_DOC_ACCEPT, BRAND_DOC_BUCKET, BRAND_DOC_TYPES,
-  MAX_BRAND_DOC_BYTES, MAX_BRAND_PDF_BYTES, MB, maxBrandDocBytes, resolveDocType,
+  MAX_BRAND_DOC_BYTES, MB, resolveDocType,
 } from '@/lib/brand-docs'
 import type { BrandDocument } from '@/lib/types'
 
@@ -72,8 +72,8 @@ export default function BrandDocuments({
       const type = resolveDocType(file)
       if (!type) { errs.push(`${file.name}: not an accepted file type — PDF, .docx, .pptx, .xlsx or .txt.`); continue }
       if (file.size === 0) { errs.push(`${file.name}: the file is empty.`); continue }
-      if (file.size > maxBrandDocBytes(type)) {
-        errs.push(`${file.name}: ${(file.size / MB).toFixed(1)}MB — the limit is ${maxBrandDocBytes(type) / MB}MB${type === 'application/pdf' ? '' : ' for this file type (PDFs can be up to ' + MAX_BRAND_PDF_BYTES / MB + 'MB)'}.`)
+      if (file.size > MAX_BRAND_DOC_BYTES) {
+        errs.push(`${file.name}: ${(file.size / MB).toFixed(1)}MB — the limit is ${MAX_BRAND_DOC_BYTES / MB}MB.`)
         continue
       }
 
@@ -193,7 +193,7 @@ export default function BrandDocuments({
             {busy ? `Uploading ${busy.name} — ${busy.done + 1} of ${busy.total}…` : 'Upload brand guidelines'}
           </div>
           <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
-            Brand book, style guide, logo or font rules · drop files or click · PDF up to {MAX_BRAND_PDF_BYTES / MB}MB · .docx, .pptx, .xlsx, .txt up to {MAX_BRAND_DOC_BYTES / MB}MB
+            Brand book, style guide, logo or font rules · drop files or click · PDF, .docx, .pptx, .xlsx, .txt · up to {MAX_BRAND_DOC_BYTES / MB}MB
           </div>
         </div>
       </label>

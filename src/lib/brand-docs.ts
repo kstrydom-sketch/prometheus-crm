@@ -1,6 +1,6 @@
 // What may be attached to a brand, and how big.
 //
-// Shared by the browser (so the person gets a real message before a 50MB upload
+// Shared by the browser (so the person gets a real message before a 250MB upload
 // starts) and by the Server Actions (so the rule is actually enforced). It
 // cannot live in actions.ts: that file is 'use server' and may only export
 // async functions.
@@ -35,21 +35,15 @@ export const BRAND_DOC_ACCEPT = [
   ...Object.keys(BRAND_DOC_TYPES),
 ].join(',')
 
-// PDFs up to 100MB (raised 15 Oct): print-ready brand books with full-bleed
-// photography pass 50MB, and a PDF is the format the team reads in place. Other
-// types stay at 50MB.
+// Every type up to 250MB (raised 17 Oct; PDFs were 100MB, the rest 50MB).
+// Print-ready brand books with full-bleed photography run past 100MB.
 //
-// The brand-docs bucket's file_size_limit is 100MB — the ceiling a forged
+// The brand-docs bucket's file_size_limit is 250MB — the ceiling a forged
 // request cannot talk past — and Supabase's project-wide upload limit
 // (Dashboard -> Project Settings -> Storage) must be at least that, or every
-// file over 50MB is refused AFTER uploading in full. These constants only let
+// file over it is refused AFTER uploading in full. This constant only lets
 // the browser say so before an upload starts.
-export const MAX_BRAND_DOC_BYTES = 50 * 1024 * 1024
-export const MAX_BRAND_PDF_BYTES = 100 * 1024 * 1024
-
-/** The size limit for one file of this type. */
-export const maxBrandDocBytes = (contentType: string): number =>
-  contentType === 'application/pdf' ? MAX_BRAND_PDF_BYTES : MAX_BRAND_DOC_BYTES
+export const MAX_BRAND_DOC_BYTES = 250 * 1024 * 1024
 
 const BY_EXT: Record<string, string> = Object.fromEntries(
   Object.entries(BRAND_DOC_TYPES).map(([mime, spec]) => [spec.ext, mime]),

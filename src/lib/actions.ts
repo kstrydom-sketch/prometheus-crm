@@ -26,7 +26,7 @@ import { lpMoveRefusal, lpMoveRoute } from '@/lib/lp-review'
 import { momentCode } from '@/lib/moment-code'
 import {
   BRAND_DOC_BUCKET, BRAND_DOC_TYPES,
-  brandDocPath, safeDocName, asciiDocName, isUuid, maxBrandDocBytes,
+  brandDocPath, safeDocName, asciiDocName, isUuid, MAX_BRAND_DOC_BYTES,
 } from '@/lib/brand-docs'
 import {
   BRIEF_BUCKET, BRIEF_TYPES, MAX_BRIEF_BYTES, MAX_PDF_PREVIEW_PAGES, BRIEF_IMAGE_URL_TTL_SECONDS,
@@ -3813,8 +3813,8 @@ export async function createBrandDocumentUploadUrl(
     return { ok: false, error: 'Only PDF, Word (.docx), PowerPoint (.pptx), Excel (.xlsx) and .txt files can be attached.' }
   }
   if (!Number.isFinite(byteSize) || byteSize <= 0) return { ok: false, error: 'That file is empty.' }
-  if (byteSize > maxBrandDocBytes(contentType)) {
-    return { ok: false, error: `That file is ${(byteSize / 1048576).toFixed(1)}MB — the limit for ${spec.label} files is ${maxBrandDocBytes(contentType) / 1048576}MB.` }
+  if (byteSize > MAX_BRAND_DOC_BYTES) {
+    return { ok: false, error: `That file is ${(byteSize / 1048576).toFixed(1)}MB — the limit is ${MAX_BRAND_DOC_BYTES / 1048576}MB.` }
   }
 
   const path = brandDocPath(brandId, contentType)
@@ -3855,7 +3855,7 @@ export async function attachBrandDocument(
   const spec = BRAND_DOC_TYPES[input.contentType]
   if (!spec) return { ok: false, error: 'That file type is not accepted.' }
   if (!input.path.endsWith(`.${spec.ext}`)) return { ok: false, error: 'That upload does not match its type.' }
-  if (!Number.isFinite(input.byteSize) || input.byteSize <= 0 || input.byteSize > maxBrandDocBytes(input.contentType)) {
+  if (!Number.isFinite(input.byteSize) || input.byteSize <= 0 || input.byteSize > MAX_BRAND_DOC_BYTES) {
     return { ok: false, error: 'That file is outside the size limit.' }
   }
 

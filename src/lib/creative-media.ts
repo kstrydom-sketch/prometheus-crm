@@ -9,11 +9,11 @@ import { driveThumb, resizeDriveThumb } from '@/lib/drive-thumb'
 
 /**
  * Supabase Storage refuses any single object over the project's upload limit
- * (50MB today — Dashboard -> Project Settings -> Storage). Checked BEFORE an
+ * (250MB since 17 Oct — Dashboard -> Project Settings -> Storage). Checked BEFORE an
  * upload starts: a refused file is only rejected after every byte has gone up,
  * which on a 60MB video was over a minute of waiting for an error.
  */
-export const MAX_VIDEO_BYTES = 50 * 1024 * 1024
+export const MAX_VIDEO_BYTES = 250 * 1024 * 1024
 
 /** What browsers play natively, with the extension the copy is saved under. */
 export const VIDEO_TYPES: Record<string, string> = {
