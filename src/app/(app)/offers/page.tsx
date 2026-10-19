@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import { createClient, getCachedUser } from '@/lib/supabase/server'
-import { canEdit, canViewCapacity } from '@/lib/permissions'
+import { canEdit, isOfferAssignee } from '@/lib/permissions'
 import { getCachedProfiles } from '@/lib/profiles'
 import type { Brand, OfferCard } from '@/lib/types'
 import { buildOfferHistory, type OfferHistoryProject } from '@/lib/offer-history'
@@ -90,7 +90,7 @@ export default async function OffersPage() {
   const history = buildOfferHistory(cards, (projectsRaw ?? []) as unknown as OfferHistoryProject[])
 
   // Offers are strategist-owned: the assignee picker lists the management
-  // roster (Giovane / Lucas / Roberto), the same people canViewCapacity gates.
+  // roster (Giovane / Lucas / Roberto) — see isOfferAssignee().
   // Each engineer's link plus how many of their offers are sitting in internal
   // review right now — the number is what makes the panel worth looking at.
   const brandEngineer = new Map(
@@ -112,7 +112,7 @@ export default async function OffersPage() {
       waiting: waitingByEngineer.get(e.name) ?? 0,
     }))
 
-  const assignees = profiles.filter(p => canViewCapacity(p.email))
+  const assignees = profiles.filter(p => isOfferAssignee(p.email))
   const currentProfileId = profiles.find(p => p.email === user.email?.toLowerCase())?.id ?? null
 
   return (

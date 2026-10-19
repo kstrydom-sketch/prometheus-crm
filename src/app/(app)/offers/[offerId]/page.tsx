@@ -1,7 +1,7 @@
 import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient, getCachedUser } from '@/lib/supabase/server'
-import { canEdit, canViewCapacity } from '@/lib/permissions'
+import { canEdit, isOfferAssignee } from '@/lib/permissions'
 import { getCachedProfiles } from '@/lib/profiles'
 import { offerMonthLabel, type Brand, type BrandDna, type OfferCard } from '@/lib/types'
 import { buildOfferHistory, type OfferHistoryCard, type OfferHistoryProject } from '@/lib/offer-history'
@@ -38,7 +38,7 @@ export default async function OfferPage({
   if (!cardRaw) notFound()
 
   const card = cardRaw as unknown as OfferWithBrand
-  const assignees = profiles.filter(p => canViewCapacity(p.email))
+  const assignees = profiles.filter(p => isOfferAssignee(p.email))
 
   const [
     { data: dnaRaw },

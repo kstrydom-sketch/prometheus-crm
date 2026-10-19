@@ -1,6 +1,6 @@
 'use client'
 
-// Team roll-up — visible only to canViewCapacity() (the same management-only
+// Team roll-up — visible only to canViewCapacity() (the same capacity-reviewer
 // gate the sidebar capacity counters use).
 //
 // The two numbers worth reading first are the load gap (carried vs. what the

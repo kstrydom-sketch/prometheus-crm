@@ -26,8 +26,22 @@ const MANAGEMENT = [
 const isManagement = (email: string | undefined | null): boolean =>
   !!email && MANAGEMENT.includes(email.toLowerCase())
 
-/** Team-capacity counters in the sidebar. */
+// Who reviews the team's capacity: management, plus people who follow the
+// weekly reports without being on the management roster. Kept separate so that
+// adding someone here doesn't also put them in the offer assignee picker or /codes.
+const CAPACITY_REVIEWERS = [
+  ...MANAGEMENT,
+  'omkar@commonthreadglobal.com',
+]
+
+/** Team-capacity counters in the sidebar, plus the team roll-up and
+ *  assignments-by-editor pivot on /capacity. */
 export function canViewCapacity(email: string | undefined | null): boolean {
+  return !!email && CAPACITY_REVIEWERS.includes(email.toLowerCase())
+}
+
+/** Offers are strategist-owned: the assignee picker lists the management roster. */
+export function isOfferAssignee(email: string | undefined | null): boolean {
   return isManagement(email)
 }
 

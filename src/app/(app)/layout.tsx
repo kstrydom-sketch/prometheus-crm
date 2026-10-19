@@ -39,7 +39,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     )
   }
 
-  // Sidebar capacity counters are management-only; skip the extra projects
+  // Sidebar capacity counters are for capacity reviewers only; skip the extra projects
   // query entirely for everyone else.
   const showCapacity = canViewCapacity(user.email)
   const supabase = await createClient()
