@@ -90,7 +90,7 @@ export default async function OffersPage() {
   const history = buildOfferHistory(cards, (projectsRaw ?? []) as unknown as OfferHistoryProject[])
 
   // Offers are strategist-owned: the assignee picker lists the management
-  // roster (Giovane / Lucas / Roberto) — see isOfferAssignee().
+  // roster (Giovane / Kaylin / Lucas / Roberto) — see isOfferAssignee().
   // Each engineer's link plus how many of their offers are sitting in internal
   // review right now — the number is what makes the panel worth looking at.
   const brandEngineer = new Map(
