@@ -131,13 +131,14 @@ export default function ResultsTable({ rows, nowMs }: { rows: ResultsTableRow[];
                 <th style={TH}>CPM</th>
                 <th style={TH}>CTR</th>
                 <th style={TH}>CVR</th>
+                <th style={TH}>AOV</th>
                 <th style={{ ...TH, textAlign: 'left' }}>Updated</th>
               </tr>
             </thead>
             <tbody>
               {visible.length === 0 ? (
                 <tr>
-                  <td colSpan={9} style={{ ...TD, textAlign: 'center', padding: '28px 14px', color: 'var(--text-muted)' }}>
+                  <td colSpan={10} style={{ ...TD, textAlign: 'center', padding: '28px 14px', color: 'var(--text-muted)' }}>
                     No tracked pages match these filters.
                   </td>
                 </tr>
@@ -161,6 +162,7 @@ export default function ResultsTable({ rows, nowMs }: { rows: ResultsTableRow[];
                   <td style={TF_NUM}>{fmtCents(grandKpis.cpm_cents)}</td>
                   <td style={TF_NUM}>{fmtPct(grandKpis.ctr)}</td>
                   <td style={TF_NUM}>{fmtPct(grandKpis.cvr)}</td>
+                  <td style={TF_NUM}>{fmtCents(grandKpis.aov_cents)}</td>
                   <td style={{ ...TF, textAlign: 'left' }} />
                 </tr>
               </tfoot>
@@ -228,6 +230,7 @@ function Row({ r, nowMs }: { r: ResultsTableRow; nowMs: number }) {
       <KpiCell value={fmtCents(r.lp.cpm_cents)} rest={fmtCents(r.rest?.cpm_cents ?? null)} verdict={verdict(r.lp.cpm_cents, r.rest?.cpm_cents ?? null, 'lower')} />
       <KpiCell value={fmtPct(r.lp.ctr)} rest={fmtPct(r.rest?.ctr ?? null)} verdict={verdict(r.lp.ctr, r.rest?.ctr ?? null, 'higher')} />
       <KpiCell value={fmtPct(r.lp.cvr)} rest={fmtPct(r.rest?.cvr ?? null)} verdict={verdict(r.lp.cvr, r.rest?.cvr ?? null, 'higher')} />
+      <KpiCell value={fmtCents(r.lp.aov_cents)} rest={fmtCents(r.rest?.aov_cents ?? null)} verdict={verdict(r.lp.aov_cents, r.rest?.aov_cents ?? null, 'higher')} />
       <td style={{ ...TD, whiteSpace: 'nowrap' }}>
         {r.freshness ? <FreshnessStamp rows={[r.freshness]} nowMs={nowMs} /> : <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>—</span>}
       </td>
