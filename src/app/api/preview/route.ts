@@ -383,7 +383,11 @@ const PREVIEW_BRIDGE_SCRIPT = String.raw`
     if (!layer) {
       layer = document.createElement('div')
       layer.id = layerId
-      layer.style.cssText = 'position:absolute;inset:0 auto auto 0;margin:0;padding:0;pointer-events:none;z-index:2147483647'
+      // Some LPs hide every direct child of <body> but their own wrapper
+      // (e.g. 'body > :not(#bh-page) { display: none !important }') to strip
+      // the theme chrome, which took the marker layer with it. An inline
+      // !important outranks any stylesheet rule.
+      layer.style.cssText = 'position:absolute;inset:0 auto auto 0;margin:0;padding:0;pointer-events:none;z-index:2147483647;display:block !important'
       document.body.appendChild(layer)
     }
     layer.textContent = ''
