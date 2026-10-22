@@ -116,8 +116,9 @@ export default async function ResultsPage() {
     return {
       id: t.id,
       brand: t.brands?.name ?? 'Unknown brand',
-      title: t.projects?.name ?? t.lp_url.replace(/^https?:\/\/(www\.)?/, ''),
+      title: t.projects?.name ?? (t.lp_url?.replace(/^https?:\/\/(www\.)?/, '') || 'Landing page'),
       href: t.projects ? `/preview/project/${t.projects.id}` : null,
+      lpUrl: t.lp_url ?? null,
       launchedOn: t.launched_on,
       endedOn: t.ended_on,
       hasData: lpRows.length > 0,

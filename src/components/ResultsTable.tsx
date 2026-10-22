@@ -25,6 +25,7 @@ export interface ResultsTableRow {
   brand: string
   title: string
   href: string | null
+  lpUrl: string | null
   launchedOn: string | null
   endedOn: string | null
   hasData: boolean
@@ -182,6 +183,7 @@ export default function ResultsTable({ rows, nowMs }: { rows: ResultsTableRow[];
 
 function Row({ r, nowMs }: { r: ResultsTableRow; nowMs: number }) {
   const live = r.endedOn === null
+  const lpHref = landingPageHref(r.lpUrl)
 
   return (
     <tr style={{ opacity: r.hasData ? 1 : 0.65 }}>
@@ -194,6 +196,21 @@ function Row({ r, nowMs }: { r: ResultsTableRow; nowMs: number }) {
         ) : (
           <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{r.title}</span>
         )}
+        <div style={{ fontSize: 11, marginTop: 4 }}>
+          {lpHref ? (
+            <a
+              href={lpHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ color: 'var(--accent)', textDecoration: 'none', whiteSpace: 'nowrap' }}
+              aria-label={`Open landing page for ${r.title} in a new tab`}
+            >
+              Open LP ↗
+            </a>
+          ) : (
+            <span style={{ color: 'var(--text-muted)' }}>LP unavailable</span>
+          )}
+        </div>
         {(r.sharePct !== null || r.adsHref) && (
           <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
             {r.sharePct !== null && <>{formatPercent(r.sharePct, 1)} of account spend</>}
@@ -236,6 +253,18 @@ function Row({ r, nowMs }: { r: ResultsTableRow; nowMs: number }) {
       </td>
     </tr>
   )
+}
+
+// Use only the stored tracking URL; never invent a destination for missing data.
+function landingPageHref(raw: string | null): string | null {
+  if (!raw?.trim()) return null
+  try {
+    const href = raw.trim()
+    const url = new URL(href)
+    return url.protocol === 'https:' || url.protocol === 'http:' ? href : null
+  } catch {
+    return null
+  }
 }
 
 // A KPI cell: the page's own figure, with the rest-of-account figure beneath
