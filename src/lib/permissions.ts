@@ -23,6 +23,7 @@ const MANAGEMENT = [
   'lucas@commonthreadglobal.com',
   'giovane@commonthreadglobal.com',
   'kstrydom@commonthreadglobal.com',
+  'sdiop@commonthreadglobal.com',
 ]
 
 const isManagement = (email: string | undefined | null): boolean =>
