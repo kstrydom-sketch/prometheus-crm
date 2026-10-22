@@ -14,7 +14,7 @@ import ConfirmDeleteForm from '@/components/ConfirmDeleteForm'
 import FinalOutputField from '@/components/FinalOutputField'
 import EditorPicker from '@/components/EditorPicker'
 import { editorsFor } from '@/lib/types'
-import { profileName } from '@/lib/types'
+import { profileName, briefTrackOf } from '@/lib/types'
 import type { TrackedCampaign, LpTracking, LpAdMatch, FunnelDailyRow } from '@/lib/results'
 import ProjectResultsPanel from '@/components/ProjectResultsPanel'
 import { hypercareFor, hypercareCopyMessage } from '@/lib/hypercare'
@@ -364,7 +364,7 @@ function CommentList({ comments, empty }: { comments: ProjectComment[]; empty: s
 }
 
 export default function PreviewProjectView({
-  project: p, brand, assets, comments, images, dna, revisionsByAsset, lpEditorName, creativeEditorName, journeyName, journeys, profiles, campaigns, todayIso, authorName, brandLandingPages, brandComments, brandDocuments, projectBriefs, serverNow, currentUserId,
+  project: p, brand, assets, comments, images, dna, revisionsByAsset, lpEditorName, creativeEditorName, journeyName, journeys, profiles, campaigns, todayIso, authorName, brandLandingPages, brandComments, brandDocuments, projectBriefs: allBriefs, serverNow, currentUserId,
   lpTracking, lpAdMatches, lpDaily, accountDaily, nowMs, brandAdAccount, sourceOffer = null, liquidFiles = [],
 }: {
   project: Project; brand: Brand; assets: CreativeAsset[]; comments: ProjectComment[]
@@ -616,6 +616,11 @@ export default function PreviewProjectView({
   const SUPPORT_CAP = 2000
   const supportPoisoned = !!p.supporting_message && p.supporting_message.length > SUPPORT_CAP
 
+  // One table, two lists: the Creatives tab's creative brief and the Landing
+  // Page tab's LP brief never show each other's files.
+  const projectBriefs = useMemo(() => allBriefs.filter(b => briefTrackOf(b) === 'creative'), [allBriefs])
+  const lpBriefs = useMemo(() => allBriefs.filter(b => briefTrackOf(b) === 'lp'), [allBriefs])
+
   const lpNav = useMemo(() => ([
     { id: 'page', label: 'Final output', show: true },
     { id: 'checklist', label: lpBuilding ? `Checklist · ${lpChecklist.done}/${lpChecklist.total}` : 'Checklist', show: true },
@@ -623,11 +628,12 @@ export default function PreviewProjectView({
     { id: 'discount', label: 'Discount creation', show: showLpDiscount },
     { id: 'library', label: brandLandingPages.length ? `Past pages · ${brandLandingPages.length}` : 'Past pages', show: brandLandingPages.length > 1 },
     { id: 'offer', label: 'The offer', show: true },
+    { id: 'lp-brief', label: lpBriefs.length ? `LP brief · ${lpBriefs.length}` : 'LP brief', show: true },
     { id: 'copy', label: 'Page copy', show: true },
     { id: 'product', label: 'Product', show: hasProduct },
     { id: 'feedback', label: lpOpen.length ? `Client feedback · ${lpOpen.length} open` : 'Client feedback', show: lpComments.length > 0 },
     { id: 'notes', label: 'Internal notes', show: true },
-  ]).filter(n => n.show), [hasProduct, lpOpen.length, lpComments.length, noteComments.length, brandLandingPages.length, lpBuilding, lpChecklist.done, lpChecklist.total, lpInternalOpen, showLpInternal, showLpDiscount])
+  ]).filter(n => n.show), [hasProduct, lpOpen.length, lpComments.length, noteComments.length, brandLandingPages.length, lpBuilding, lpChecklist.done, lpChecklist.total, lpInternalOpen, showLpInternal, showLpDiscount, lpBriefs.length])
 
   // Products and Motion reports are always shown, even empty: an empty list is
   // the prompt to fill it, and hiding it hides the only place the work happens.
@@ -1732,6 +1738,18 @@ export default function PreviewProjectView({
                     client inspiration simply vanished from the brief. */}
                 {p.tiered_offer && <div style={{ marginTop: 8 }}><Field label="Tiered offer">{p.tiered_offer}</Field></div>}
                 {p.inspiration && <div style={{ marginTop: 8 }}><Field label="Inspiration"><Clamp text={p.inspiration} lines={3} /></Field></div>}
+              </Card>
+
+              {/* The page's own brief files — copy docs, wireframes — kept apart
+                  from the Creatives tab's creative brief. */}
+              <Card id="lp-brief" title="LP brief" purpose="Page copy, wireframes and layout briefs for this landing page, read by AI.">
+                <ProjectBriefs
+                  key={`lp:${p.id}`} track="lp" projectId={p.id} brandId={p.brand_id} briefs={lpBriefs} serverNow={serverNow}
+                  deck={{ headlines: p.ad_headlines ?? [], subcopies: p.ad_subcopies ?? [], eyebrows: p.ad_eyebrows ?? [] }}
+                  offerText={[p.offer, p.offer_description, p.retail_price, p.discount, p.tiered_offer].filter(Boolean).join('\n')}
+                  hypercareContact={hypercareRule?.contact ?? null}
+                  brandName={brand?.name ?? null}
+                />
               </Card>
 
               {/* 3 — the words, in the order they land on the page */}

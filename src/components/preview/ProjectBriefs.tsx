@@ -12,13 +12,16 @@ import {
   IMAGE_FULL_PX, IMAGE_THUMB_PX, resolveBriefType, isReadingStale,
 } from '@/lib/project-briefs'
 import { MB } from '@/lib/doc-files'
-import type { ProjectBrief } from '@/lib/types'
+import type { BriefTrack, ProjectBrief } from '@/lib/types'
 import type { BriefDeck } from '@/lib/brief-cheatsheet'
 import { useNarrow, useUploadQueue, useSharedState, uploadTyped, DocDropZone, fmtSize, fmtDate, miniLink, miniBtn } from './doc-kit'
 import { renderPdfPreviews, pdfErrorMessage } from './render-pdf-pages'
 import BriefReader from './BriefReader'
 
-// Creative briefs on a project: upload, download, AI read, and the read itself.
+// Brief files on a project: upload, download, AI read, and the read itself.
+// One component, two homes: the Creatives tab's "Creative brief" (track
+// 'creative') and the Landing Page tab's "LP brief" (track 'lp'). Each shows
+// only its own files, and an LP brief never feeds the ad copy deck.
 // Bytes go browser -> Storage on a signed URL (a brief is 1-50MB, an action
 // body 1MB). The AI read runs server-side in a route handler; PDF page previews
 // are drawn here, in the uploader's own tab, while they are looking at it.
@@ -28,7 +31,7 @@ type Previews = { id: string; label: string } | null
 const NO_PREVIEWS: Previews = null
 const NO_ID: string | null = null
 
-export default function ProjectBriefs({ projectId, brandId, briefs, serverNow, deck, offerText, hypercareContact, brandName }: {
+export default function ProjectBriefs({ projectId, brandId, briefs, serverNow, deck, offerText, hypercareContact, brandName, track = 'creative' }: {
   projectId: string
   brandId: string
   briefs: ProjectBrief[]
@@ -41,16 +44,19 @@ export default function ProjectBriefs({ projectId, brandId, briefs, serverNow, d
   /** Hypercare brand: its copy comes from this person, and + Deck is off. */
   hypercareContact: string | null
   brandName: string | null
+  /** Which list this is. The caller passes only this track's briefs. */
+  track?: BriefTrack
 }) {
+  const lp = track === 'lp'
   const router = useRouter()
   // Shared, not local: the Creatives tab unmounts this panel on a tab switch,
   // and the upload or preview render it started keeps running. On return, the
   // panel shows that work and its one-at-a-time guards still hold.
-  const queue = useUploadQueue(`briefs:${projectId}`)
-  const previewsCell = useSharedState(`brief-previews:${projectId}`, NO_PREVIEWS)
+  const queue = useUploadQueue(`briefs:${track}:${projectId}`)
+  const previewsCell = useSharedState(`brief-previews:${track}:${projectId}`, NO_PREVIEWS)
   const previews = previewsCell.value
   // The brief this tab is still uploading or drawing previews for.
-  const workingCell = useSharedState(`brief-working:${projectId}`, NO_ID)
+  const workingCell = useSharedState(`brief-working:${track}:${projectId}`, NO_ID)
   const narrow = useNarrow()
   const [openId, setOpenId] = useState<string | null>(null)
   const [rowErr, setRowErr] = useState<{ id: string; message: string } | null>(null)
@@ -152,7 +158,7 @@ export default function ProjectBriefs({ projectId, brandId, briefs, serverNow, d
       if (upErr) return upErr
 
       const attached = await attachProjectBrief(projectId, brandId, {
-        briefId: signed.briefId, path: signed.path, fileName: file.name, contentType: type, byteSize: file.size,
+        briefId: signed.briefId, path: signed.path, fileName: file.name, contentType: type, byteSize: file.size, track,
       })
       if (!attached.ok) {
         // Bytes with no row are an orphan nobody can see. Take them back.
@@ -248,8 +254,10 @@ export default function ProjectBriefs({ projectId, brandId, briefs, serverNow, d
       <DocDropZone
         queue={queue}
         accept={BRIEF_ACCEPT}
-        title="Upload creative brief"
-        hint={`The client's brief for this project · drop files or click · PDF, .pptx, .docx, .txt, PNG/JPG · up to ${MAX_BRIEF_BYTES / MB}MB · AI reads it after upload`}
+        title={lp ? 'Upload LP brief' : 'Upload creative brief'}
+        hint={lp
+          ? `Page copy, wireframe or layout brief for this landing page · drop files or click · PDF, .pptx, .docx, .txt, PNG/JPG · up to ${MAX_BRIEF_BYTES / MB}MB · AI reads it after upload`
+          : `The client's brief for this project · drop files or click · PDF, .pptx, .docx, .txt, PNG/JPG · up to ${MAX_BRIEF_BYTES / MB}MB · AI reads it after upload`}
         onFiles={upload}
       />
 
@@ -327,6 +335,7 @@ export default function ProjectBriefs({ projectId, brandId, briefs, serverNow, d
                 brandName={brandName}
                 // Same guard as the row's Re-read button: not while a read runs.
                 onReread={status.busy ? null : () => void reread(b)}
+                allowDeck={!lp}
               />
             )}
           </div>

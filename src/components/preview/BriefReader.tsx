@@ -38,7 +38,7 @@ const NO_READ = normalizeBriefExtraction({}) as BriefExtraction
 type DeckNoteState = BriefTools['deckNote']
 
 export default function BriefReader({
-  brief, projectId, brandId, narrow, onMakePreviews, deck, offerText, hypercareContact, brandName, onReread,
+  brief, projectId, brandId, narrow, onMakePreviews, deck, offerText, hypercareContact, brandName, onReread, allowDeck = true,
 }: {
   brief: ProjectBrief
   projectId: string
@@ -55,6 +55,8 @@ export default function BriefReader({
   brandName: string | null
   /** Null while a read is running. */
   onReread: (() => void) | null
+  /** False on an LP brief: its lines are page copy, not ad copy, so + Deck is off. */
+  allowDeck?: boolean
 }) {
   const router = useRouter()
   const x = useMemo(() => normalizeBriefExtraction(brief.extraction), [brief.extraction])
@@ -226,7 +228,7 @@ export default function BriefReader({
 
   const tools: BriefTools = {
     urls, urlErr, copied, onCopy: copy,
-    deck: liveDeck, canDeck: !hypercareContact, deckBusy, onAddToDeck: addToDeck, deckNote,
+    deck: liveDeck, canDeck: allowDeck && !hypercareContact, deckBusy, onAddToDeck: addToDeck, deckNote,
     onGoToDeck: () => goTo('creative-copy'),
   }
   const hasPictures = images.length > 0

@@ -4042,7 +4042,7 @@ export async function createProjectBriefUploadUrl(
 export async function attachProjectBrief(
   projectId: string,
   brandId: string,
-  input: { briefId: string; path: string; fileName: string; contentType: string; byteSize: number },
+  input: { briefId: string; path: string; fileName: string; contentType: string; byteSize: number; track?: 'creative' | 'lp' },
 ): Promise<{ ok: true; briefId: string } | { ok: false; error: string }> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -4074,9 +4074,13 @@ export async function attachProjectBrief(
     byte_size: Math.round(input.byteSize),
     uploaded_by: user.id,
     uploaded_by_name: uploadedByName,
+    // Only written for an LP brief, so creative uploads keep working on a DB
+    // that predates the track column.
+    ...(input.track === 'lp' ? { track: 'lp' } : {}),
   })
   if (error) {
     if (error.code === '42P01') return { ok: false, error: 'Project briefs are not set up yet — run 20260917_add_project_briefs.sql.' }
+    if (input.track === 'lp' && /track/.test(error.message)) return { ok: false, error: 'LP briefs are not set up yet — run 20261023_project_briefs_track.sql.' }
     return { ok: false, error: `Could not save that brief: ${error.message}` }
   }
 

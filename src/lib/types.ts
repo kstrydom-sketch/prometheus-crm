@@ -168,7 +168,14 @@ export interface ProjectBrief {
   images_status: 'none' | 'done' | 'failed'
   images_note: string | null
   page_count: number | null
+  /** Which tab owns the file: the Creatives tab's "Creative brief" or the
+   *  Landing Page tab's "LP brief". Optional so a DB predating the 20261023
+   *  migration reads as undefined, which counts as 'creative'. */
+  track?: BriefTrack
 }
+
+export type BriefTrack = 'creative' | 'lp'
+export const briefTrackOf = (b: { track?: BriefTrack | null }): BriefTrack => (b.track === 'lp' ? 'lp' : 'creative')
 
 export interface Journey {
   id: string
