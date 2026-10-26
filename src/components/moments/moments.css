@@ -85,5 +85,6 @@
 .mo-empty { padding: 20px; color: var(--text-muted); font-size: 15px; }
 .mo-tabs { display: flex; gap: 8px; flex-wrap: wrap; }
 .mo-tab { border: 1px solid var(--border-strong); background: var(--surface); color: var(--text-secondary); border-radius: 999px; padding: 7px 14px; font-size: 14px; font-weight: 600; text-decoration: none; }
+.mo-tab-sm { padding: 5px 12px; font-size: 13.5px; }
 .mo-tab[aria-current="page"] { background: var(--text-primary); border-color: var(--text-primary); color: var(--surface); }
 .mo-error { color: #B91C1C; font-size: 14px; }

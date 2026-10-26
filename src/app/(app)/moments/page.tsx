@@ -5,7 +5,7 @@ import { getCachedProfiles } from '@/lib/profiles'
 import { profileName } from '@/lib/types'
 import {
   formatDue, isOpen, isOverdue, MOMENT_STAGE, momentStage, orderSteps, STEP_STATUS, todayIso,
-  type Moment, type MomentStep,
+  type Moment, type MomentStage as MomentStageKey, type MomentStep,
 } from '@/lib/moments/model'
 import { NewMomentForm } from '@/components/moments/MomentControls'
 import '@/components/moments/moments.css'
@@ -18,9 +18,10 @@ const FILTERS: Array<{ key: Filter; label: string }> = [
   { key: 'all', label: 'All' },
 ]
 
-export default async function MomentsPage({ searchParams }: { searchParams: Promise<{ show?: string }> }) {
-  const { show } = await searchParams
+export default async function MomentsPage({ searchParams }: { searchParams: Promise<{ show?: string; stage?: string }> }) {
+  const { show, stage: stageParam } = await searchParams
   const filter: Filter = (FILTERS.find(f => f.key === show)?.key) ?? 'active'
+  const stageFilter = (Object.keys(MOMENT_STAGE) as MomentStageKey[]).find(k => k === stageParam) ?? null
   const user = await getCachedUser()
   if (!user) redirect('/login')
   const supabase = await createClient()
@@ -52,6 +53,15 @@ export default async function MomentsPage({ searchParams }: { searchParams: Prom
     if (filter === 'late') return r.late.length > 0 && r.m.status === 'active'
     return true
   })
+  // Stage counts reflect the filter above, so each chip says what you'd get.
+  const stageCounts = rows.reduce((acc, r) => ({ ...acc, [r.stage]: (acc[r.stage] ?? 0) + 1 }), {} as Partial<Record<MomentStageKey, number>>)
+  const shown = stageFilter ? rows.filter(r => r.stage === stageFilter) : rows
+  const href = (q: { show?: Filter; stage?: MomentStageKey | null }) => {
+    const params = new URLSearchParams({ show: q.show ?? filter })
+    const st = 'stage' in q ? q.stage : stageFilter
+    if (st) params.set('stage', st)
+    return `/moments?${params}`
+  }
 
   return (
     <div className="mo-page">
@@ -65,16 +75,26 @@ export default async function MomentsPage({ searchParams }: { searchParams: Prom
 
       <nav className="mo-tabs" aria-label="Filter moments">
         {FILTERS.map(f => (
-          <Link key={f.key} href={`/moments?show=${f.key}`} className="mo-tab" aria-current={f.key === filter ? 'page' : undefined}>{f.label}</Link>
+          <Link key={f.key} href={href({ show: f.key })} className="mo-tab" aria-current={f.key === filter ? 'page' : undefined}>{f.label}</Link>
+        ))}
+      </nav>
+
+      <nav className="mo-tabs" aria-label="Filter by stage" style={{ marginTop: -8 }}>
+        <Link href={href({ stage: null })} className="mo-tab mo-tab-sm" aria-current={!stageFilter ? 'page' : undefined}>Any stage · {rows.length}</Link>
+        {(Object.keys(MOMENT_STAGE) as MomentStageKey[]).map(k => (
+          <Link key={k} href={href({ stage: k })} className="mo-tab mo-tab-sm" aria-current={k === stageFilter ? 'page' : undefined}
+            style={k === stageFilter ? undefined : { color: MOMENT_STAGE[k].fg, background: MOMENT_STAGE[k].bg, borderColor: 'transparent', opacity: stageCounts[k] ? 1 : 0.5 }}>
+            {MOMENT_STAGE[k].label} · {stageCounts[k] ?? 0}
+          </Link>
         ))}
       </nav>
 
       <section className="mo-panel">
-        {rows.length === 0 ? (
-          <p className="mo-empty">No moments here yet. Create one with “+ New moment”: it comes with every step and its due date.</p>
+        {shown.length === 0 ? (
+          <p className="mo-empty">{stageFilter ? `No moments in ${MOMENT_STAGE[stageFilter].label} with this filter.` : 'No moments here yet. Create one with “+ New moment”: it comes with every step and its due date.'}</p>
         ) : (
           <ul className="mo-list">
-            {rows.map(({ m, total, done, late, next, stage }) => (
+            {shown.map(({ m, total, done, late, next, stage }) => (
               <li key={m.id} style={{ gridTemplateColumns: 'minmax(220px, 2fr) minmax(240px, 2fr) minmax(130px, 1fr) auto' }}>
                 <div>
                   <Link href={`/moments/${m.id}`} style={{ fontWeight: 700, fontSize: 16 }}>{m.name}</Link>
