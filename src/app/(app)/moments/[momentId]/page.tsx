@@ -9,6 +9,7 @@ import {
 } from '@/lib/moments/model'
 import { AssigneeSelect, DueInput, StatusSelect, type Person } from '@/components/moments/StepControls'
 import StepComposer from '@/components/moments/StepComposer'
+import CommentThreads from '@/components/moments/CommentThreads'
 import {
   AddStepForm, DeleteStepButton, FollowButton, MomentOwnerSelect, MomentStatusSelect, RescheduleForm,
 } from '@/components/moments/MomentControls'
@@ -152,20 +153,7 @@ export default async function MomentPage({
                 {selected.completed_at && <><span>Finished</span><div>{when(selected.completed_at)}</div></>}
               </div>
               <hr style={{ border: 0, borderTop: '1px solid var(--border)', margin: 0 }} />
-              <div className="mo-thread">
-                {comments.filter(c => c.step_id === selected.id).map(c => (
-                  <article key={c.id} className="mo-comment">
-                    <div className="mo-comment-head">
-                      <b>{nameOf(c.author_id)}</b>
-                      <span className={`mo-kind mo-kind-${c.kind}`}>{c.kind === 'needs_action' ? 'Needs action' : c.kind === 'fyi' ? 'FYI' : 'Note'}</span>
-                      <span className="mo-muted" style={{ fontSize: 13 }}>{when(c.created_at)}</span>
-                    </div>
-                    <div className="mo-comment-body">{c.body}</div>
-                    {c.mentions.length > 0 && <div className="mo-muted" style={{ fontSize: 13 }}>Tagged: {c.mentions.map(nameOf).join(', ')}</div>}
-                  </article>
-                ))}
-                {commentCount(selected.id) === 0 && <p className="mo-muted" style={{ margin: 0, fontSize: 14 }}>No comments on this step yet.</p>}
-              </div>
+              <CommentThreads comments={comments.filter(c => c.step_id === selected.id)} people={people} momentId={moment.id} stepId={selected.id} emptyText="No comments on this step yet." />
               <StepComposer momentId={moment.id} stepId={selected.id} people={people} defaultMention={selected.assignee_id} />
               <details>
                 <summary className="mo-muted" style={{ cursor: 'pointer', fontSize: 14 }}>History of this step</summary>
@@ -181,14 +169,7 @@ export default async function MomentPage({
             <section className="mo-panel mo-panel-pad" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <h2 className="mo-h2">Discussion</h2>
               <p className="mo-muted" style={{ margin: 0, fontSize: 14 }}>Click a step to see its comments. Comments here are about the whole moment.</p>
-              <div className="mo-thread">
-                {comments.filter(c => !c.step_id).map(c => (
-                  <article key={c.id} className="mo-comment">
-                    <div className="mo-comment-head"><b>{nameOf(c.author_id)}</b><span className={`mo-kind mo-kind-${c.kind}`}>{c.kind === 'needs_action' ? 'Needs action' : c.kind === 'fyi' ? 'FYI' : 'Note'}</span><span className="mo-muted" style={{ fontSize: 13 }}>{when(c.created_at)}</span></div>
-                    <div className="mo-comment-body">{c.body}</div>
-                  </article>
-                ))}
-              </div>
+              <CommentThreads comments={comments.filter(c => !c.step_id)} people={people} momentId={moment.id} stepId={null} emptyText="No discussion yet." />
               <StepComposer momentId={moment.id} stepId={null} people={people} defaultMention={moment.owner_id} />
             </section>
           )}

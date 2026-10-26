@@ -47,6 +47,7 @@ export interface StepComment {
   body: string
   kind: CommentKind
   mentions: string[]
+  parent_id: string | null
   created_at: string
   edited_at: string | null
 }
@@ -71,7 +72,7 @@ export interface InboxItem {
   step_id: string | null
   comment_id: string | null
   kind: 'needs_action' | 'fyi'
-  reason: 'assigned' | 'mentioned' | 'following' | 'comment_on_my_step'
+  reason: 'assigned' | 'mentioned' | 'following' | 'comment_on_my_step' | 'reply'
   actor_id: string | null
   title: string
   body: string | null

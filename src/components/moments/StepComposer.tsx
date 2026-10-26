@@ -9,12 +9,16 @@ import './moments.css'
 // Internal comment box. The kind decides who gets told:
 //   note → only @mentioned people · FYI → mentioned + followers, to read and
 //   clear · needs action → stays in the tagged people's inbox until cleared.
-export default function StepComposer({ momentId, stepId, people, defaultMention }: {
+export default function StepComposer({ momentId, stepId, people, defaultMention, parentId = null, onDone }: {
   momentId: string
   stepId: string | null
   people: Person[]
   defaultMention?: string | null
+  /** Set when replying: the comment this reply belongs under. */
+  parentId?: string | null
+  onDone?: () => void
 }) {
+  const isReply = !!parentId
   const [body, setBody] = useState('')
   const [kind, setKind] = useState<CommentKind>('note')
   const [mentions, setMentions] = useState<string[]>([])
@@ -25,22 +29,24 @@ export default function StepComposer({ momentId, stepId, people, defaultMention 
   const submit = () => {
     setError(null)
     start(async () => {
-      const res = await addComment({ momentId, stepId, body, kind, mentions })
+      const res = await addComment({ momentId, stepId, body, kind, mentions, parentId })
       if (!res.ok) { setError(res.error); return }
       setBody('')
       setMentions([])
       setKind('note')
+      onDone?.()
     })
   }
 
   return (
-    <div className="mo-composer">
-      <label htmlFor={`composer-${stepId ?? momentId}`} style={{ marginBottom: 0 }}>Internal comment</label>
+    <div className={`mo-composer${isReply ? ' mo-composer-reply' : ''}`}>
+      <label htmlFor={`composer-${parentId ?? stepId ?? momentId}`} style={{ marginBottom: 0 }}>{isReply ? 'Reply' : 'Internal comment'}</label>
       <textarea
-        id={`composer-${stepId ?? momentId}`}
+        id={`composer-${parentId ?? stepId ?? momentId}`}
         value={body}
+        autoFocus={isReply}
         onChange={e => setBody(e.target.value)}
-        placeholder="Only the team sees this."
+        placeholder={isReply ? 'Reply to this thread…' : 'Only the team sees this.'}
         onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') submit() }}
       />
       <div className="mo-seg" role="group" aria-label="Comment type">
@@ -61,8 +67,9 @@ export default function StepComposer({ momentId, stepId, people, defaultMention 
       </div>
       <div className="mo-row">
         <button type="button" className="btn-primary btn-sm" onClick={submit} disabled={pending || !body.trim()}>
-          {pending ? 'Posting…' : 'Post comment'}
+          {pending ? 'Posting…' : isReply ? 'Post reply' : 'Post comment'}
         </button>
+        {isReply && <button type="button" className="btn-secondary btn-sm" onClick={onDone}>Cancel</button>}
         {error && <span className="mo-error" role="alert">{error}</span>}
       </div>
     </div>

@@ -230,6 +230,7 @@ export async function addComment(input: {
   body: string
   kind: CommentKind
   mentions: string[]
+  parentId?: string | null
 }): Promise<Result> {
   const auth = await editor()
   if (!auth.ok) return auth
@@ -240,8 +241,20 @@ export async function addComment(input: {
     return { ok: false, error: 'Tag who needs to act, so it lands in their inbox.' }
   }
 
+  // Replies attach to the thread's first comment (one level deep), and everyone
+  // already in the thread hears about them.
+  let parentId: string | null = null
+  let threadPeople: string[] = []
+  if (input.parentId) {
+    const { data: parent } = await supabase.from('step_comments').select('id, parent_id, moment_id, author_id').eq('id', input.parentId).single()
+    if (!parent || parent.moment_id !== input.momentId) return { ok: false, error: 'That thread no longer exists.' }
+    parentId = parent.parent_id ?? parent.id
+    const { data: thread } = await supabase.from('step_comments').select('author_id, mentions').or(`id.eq.${parentId},parent_id.eq.${parentId}`)
+    threadPeople = [...new Set((thread ?? []).flatMap(c => [c.author_id, ...(c.mentions ?? [])]).filter((x): x is string => !!x))]
+  }
+
   const { data: comment, error } = await supabase.from('step_comments').insert({
-    moment_id: input.momentId, step_id: input.stepId, author_id: user.id, body, kind: input.kind, mentions: input.mentions,
+    moment_id: input.momentId, step_id: input.stepId, author_id: user.id, body, kind: input.kind, mentions: input.mentions, parent_id: parentId,
   }).select('id').single()
   if (error || !comment) return { ok: false, error: error?.message ?? 'Could not post.' }
 
@@ -258,6 +271,7 @@ export async function addComment(input: {
   // reason wins (a mentioned follower gets the mention, not the FYI).
   const rows = [
     ...input.mentions.map(id => ({ ...base, recipient_id: id, kind: (input.kind === 'needs_action' ? 'needs_action' : 'fyi') as 'needs_action' | 'fyi', reason: 'mentioned', title: `${input.kind === 'needs_action' ? 'Action needed' : 'You were mentioned'}: ${where}` })),
+    ...threadPeople.map(id => ({ ...base, recipient_id: id, kind: 'fyi' as const, reason: 'reply', title: `New reply: ${where}` })),
     ...(step?.assignee_id ? [{ ...base, recipient_id: step.assignee_id, kind: 'fyi' as const, reason: 'comment_on_my_step', title: `New comment on your step: ${where}` }] : []),
     ...(input.kind === 'note' ? [] : (followers ?? []).map(f => ({ ...base, recipient_id: f.profile_id, kind: 'fyi' as const, reason: 'following', title: `Update: ${where}` }))),
   ]
