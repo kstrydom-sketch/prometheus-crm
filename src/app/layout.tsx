@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist } from "next/font/google";
 import "./globals.css";
+import "./prototype-theme.css";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -12,14 +13,10 @@ export const metadata: Metadata = {
   description: "Common Thread Collective — Prometheus Project Studio",
 };
 
-// Read the persisted theme and apply the class BEFORE React hydrates so the
-// browser never paints the wrong background. Runs sync, blocks first paint by
-// a few microseconds — a fair trade to avoid a jarring dark→light flash.
+// Prototype: light only. The class is rendered on <html> below, and this keeps
+// it there even if an old 'dark' preference is still in localStorage.
 const themeInitScript = `(function() {
-  try {
-    var t = localStorage.getItem('prometheus-theme');
-    if (t === 'light') document.documentElement.classList.add('theme-light');
-  } catch (e) { /* localStorage blocked — stick with default dark */ }
+  document.documentElement.classList.add('theme-light');
 })();`;
 
 export default function RootLayout({
@@ -28,7 +25,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${geistSans.variable} h-full`} suppressHydrationWarning>
+    <html lang="en" className={`${geistSans.variable} h-full theme-light`} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>

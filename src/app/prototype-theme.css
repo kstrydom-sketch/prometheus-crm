@@ -1,0 +1,151 @@
+/* ── Prototype theme ─────────────────────────────────────────────────────────
+ * Light-only, cream, and easier to read. Everything lives in this one file so
+ * the look can be reviewed, kept or dropped without touching components.
+ *
+ * Principles:
+ *   1. Readable sizes: nothing under 12px; body text 15px; line height 1.5.
+ *   2. Contrast: text tokens meet WCAG AA (4.5:1) on the cream background.
+ *   3. Comfortable targets: buttons and inputs at least 40px tall.
+ *   4. Calm surfaces: warm neutrals, soft borders, one accent colour.
+ *   5. Fewer shouting labels: sentence-case form labels instead of tiny caps.
+ * ──────────────────────────────────────────────────────────────────────── */
+
+/* Cream palette. Overrides the light theme tokens; dark is switched off in
+ * layout.tsx, so these are the only values the app ever uses. */
+html.theme-light {
+  --background:     #F7F2E8;
+  --surface:        #FFFCF6;
+  --surface-1:      #FFFCF6;
+  --surface-2:      #F2EBDD;
+  --surface-raised: #FBF7EE;
+  --border:         #E7DECD;
+  --border-strong:  #D8CCB5;
+  --border-hover:   #C4B595;
+
+  --text-primary:   #2A251E;   /* ~14:1 on cream */
+  --text-secondary: #5C5346;   /* ~7.5:1 */
+  --text-muted:     #736856;   /* ~4.9:1 */
+
+  --accent:         #C2540A;   /* white text on it ~4.8:1 */
+  --accent-hover:   #A84809;
+  --accent-muted:   rgba(194, 84, 10, 0.12);
+
+  --sidebar-bg:     #EFE6D4;
+  --sidebar-border: rgba(60, 40, 10, 0.10);
+
+  --scrollbar-thumb: #CDBFA6;
+  --hover-ring:      rgba(60, 40, 10, 0.16);
+  --hover-shadow:    rgba(70, 50, 20, 0.10);
+
+  /* Type scale, one step larger across the board. */
+  --text-2xs:  12px;
+  --text-xs:   12.5px;
+  --text-sm:   13.5px;
+  --text-base: 15px;
+  --text-md:   16.5px;
+  --text-lg:   19px;
+  --text-xl:   23px;
+  --text-2xl:  32px;
+
+  color-scheme: light;
+}
+
+html.theme-light body {
+  line-height: 1.5;
+  font-size: 15px;
+}
+
+/* ── Readability floor ────────────────────────────────────────────────────
+ * Components set ~1,250 inline font sizes, most of them 9–13px. Rather than
+ * rewrite every component, lift each small size one step here. Both spellings
+ * are needed: server HTML has no space after the colon, the browser adds one.
+ */
+html.theme-light [style*="font-size:9px"],  html.theme-light [style*="font-size: 9px"]  { font-size: 12px !important; }
+html.theme-light [style*="font-size:10px"], html.theme-light [style*="font-size: 10px"] { font-size: 12px !important; }
+html.theme-light [style*="font-size:11px"], html.theme-light [style*="font-size: 11px"] { font-size: 13px !important; }
+html.theme-light [style*="font-size:12px"], html.theme-light [style*="font-size: 12px"] { font-size: 14px !important; }
+html.theme-light [style*="font-size:13px"], html.theme-light [style*="font-size: 13px"] { font-size: 15px !important; }
+html.theme-light [style*="font-size:14px"], html.theme-light [style*="font-size: 14px"] { font-size: 15.5px !important; }
+html.theme-light [style*="font-size:15px"], html.theme-light [style*="font-size: 15px"] { font-size: 16.5px !important; }
+html.theme-light [style*="font-size:16px"], html.theme-light [style*="font-size: 16px"] { font-size: 17px !important; }
+
+/* ── Controls ─────────────────────────────────────────────────────────── */
+html.theme-light input,
+html.theme-light textarea,
+html.theme-light select {
+  background-color: var(--surface);
+  border-color: var(--border-strong);
+  border-radius: 10px;
+  padding: 11px 14px;
+  font-size: 15px;
+  line-height: 1.4;
+}
+html.theme-light input[type="checkbox"],
+html.theme-light input[type="radio"] { width: 18px; height: 18px; padding: 0; accent-color: var(--accent); }
+html.theme-light input:focus,
+html.theme-light textarea:focus,
+html.theme-light select:focus { border-color: var(--accent); box-shadow: var(--focus-ring); }
+
+html.theme-light label {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-transform: none;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+html.theme-light .btn-primary,
+html.theme-light .btn-secondary,
+html.theme-light .btn-accent-outline,
+html.theme-light .btn-danger {
+  font-size: 15px;
+  padding: 11px 20px;
+  min-height: 42px;
+  border-radius: 10px;
+}
+html.theme-light .btn-primary { box-shadow: 0 1px 2px rgba(70, 50, 20, 0.15); }
+html.theme-light .btn-secondary { background-color: var(--surface); color: var(--text-primary); border-color: var(--border-strong); }
+html.theme-light .btn-secondary:hover { background-color: var(--surface-2); }
+html.theme-light .btn-sm { font-size: 13.5px; padding: 8px 14px; min-height: 34px; }
+html.theme-light .btn-icon { width: 38px; height: 38px; min-height: 38px; padding: 8px; }
+
+html.theme-light .badge {
+  font-size: 12px;
+  padding: 4px 11px;
+  letter-spacing: 0.03em;
+}
+
+/* ── Surfaces ─────────────────────────────────────────────────────────── */
+html.theme-light .card {
+  border-radius: 16px;
+  padding: 28px;
+  box-shadow: 0 1px 2px rgba(70, 50, 20, 0.05), 0 2px 8px rgba(70, 50, 20, 0.04);
+}
+html.theme-light .kanban-card { border-radius: 12px; }
+
+html.theme-light ::-webkit-scrollbar { width: 10px; height: 10px; }
+html.theme-light ::-webkit-scrollbar-track { background: var(--background); }
+html.theme-light ::-webkit-scrollbar-thumb { border-radius: 6px; border: 2px solid var(--background); }
+
+/* Dark mode is off in the prototype, so the switch has nothing to do. */
+button[aria-label="Switch to dark theme"],
+button[aria-label="Switch to light theme"] { display: none !important; }
+
+/* A quiet marker so nobody mistakes this for the live app. */
+body::after {
+  content: "Prototype · fake data";
+  position: fixed;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  z-index: 9999;
+  pointer-events: none;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: rgba(42, 37, 30, 0.82);
+  color: #FFFCF6;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}

@@ -19,17 +19,19 @@ export const STAGE_PCT: Record<Stage, number> = {
   live:            100,
 }
 
+// Prototype is light-only: text colours are the dark end of each hue so they
+// read on cream (the old values were tuned for the dark theme).
 export const STAGE_COLORS = {
-  brief:           { border: '#94A3B8', bg: 'rgba(148,163,184,0.14)', text: '#94A3B8' },
-  in_progress:     { border: '#3B82F6', bg: 'rgba(59,130,246,0.14)',  text: '#60A5FA' },
-  internal_review: { border: '#6366F1', bg: 'rgba(99,102,241,0.14)',  text: '#818CF8' },
-  client_review:   { border: '#F59E0B', bg: 'rgba(245,158,11,0.14)',  text: '#FCD34D' },
-  revisions:       { border: '#F43F5E', bg: 'rgba(244,63,94,0.14)',   text: '#FB7185' },
+  brief:           { border: '#94A3B8', bg: 'rgba(148,163,184,0.20)', text: '#475569' },
+  in_progress:     { border: '#3B82F6', bg: 'rgba(59,130,246,0.14)',  text: '#1D4ED8' },
+  internal_review: { border: '#6366F1', bg: 'rgba(99,102,241,0.14)',  text: '#4338CA' },
+  client_review:   { border: '#F59E0B', bg: 'rgba(245,158,11,0.18)',  text: '#92400E' },
+  revisions:       { border: '#F43F5E', bg: 'rgba(244,63,94,0.14)',   text: '#BE123C' },
   // Cyan for Ready — deliberately cool and distinct from both Live's lime and
   // the archived/approved emerald below, so "queued to launch", "launched" and
   // "archived" never read as the same state.
-  ready:           { border: '#06B6D4', bg: 'rgba(6,182,212,0.14)',   text: '#22D3EE' },
-  live:            { border: '#65A30D', bg: 'rgba(101,163,13,0.16)',  text: '#A3E635' },
+  ready:           { border: '#06B6D4', bg: 'rgba(6,182,212,0.16)',   text: '#0E7490' },
+  live:            { border: '#65A30D', bg: 'rgba(101,163,13,0.18)',  text: '#3F6212' },
 } satisfies Record<Stage, { border: string; bg: string; text: string }>
 
 // Emerald used to be the Done stage's colour. Done is gone, but the colour
@@ -37,7 +39,7 @@ export const STAGE_COLORS = {
 // archived project (is_complete) and the offer board's approved column. Kept
 // distinct from Live's lime on purpose — shipped and archived are different
 // states and the board should not make them look like the same thing.
-export const COMPLETE_COLORS = { border: '#10B981', bg: 'rgba(16,185,129,0.16)', text: '#34D399' }
+export const COMPLETE_COLORS = { border: '#10B981', bg: 'rgba(16,185,129,0.16)', text: '#047857' }
 
 // Offer Cycle columns reuse the production palette so the two boards read as
 // one visual system: same slate→blue→indigo→amber ramp, green for terminal.
