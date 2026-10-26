@@ -4,7 +4,7 @@ import { createClient, getCachedUser } from '@/lib/supabase/server'
 import { getCachedProfiles } from '@/lib/profiles'
 import { profileName } from '@/lib/types'
 import {
-  describeActivity, formatDue, groupStatus, isOpen, isOverdue, orderSteps, STEP_STATUS, todayIso,
+  describeActivity, formatDue, groupStatus, isOpen, isOverdue, MOMENT_STAGE, momentStage, orderSteps, STEP_STATUS, todayIso,
   type ActivityRow, type Moment, type MomentStep, type StepComment,
 } from '@/lib/moments/model'
 import { AssigneeSelect, DueInput, StatusSelect, type Person } from '@/components/moments/StepControls'
@@ -52,6 +52,8 @@ export default async function MomentPage({
   const done = work.filter(s => !isOpen(s.status)).length
   const late = work.filter(s => isOverdue(s, today))
   const selected = steps.find(s => s.id === selectedId && !s.is_group) ?? null
+  const stage = momentStage(work)
+  const next = work.find(s => isOpen(s.status))
   const commentCount = (stepId: string) => comments.filter(c => c.step_id === stepId).length
 
   return (
@@ -63,7 +65,18 @@ export default async function MomentPage({
       <header className="mo-panel mo-panel-pad" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         <div className="mo-spread">
           <div>
-            <h1 className="mo-h1">{moment.name}</h1>
+            <div className="mo-row" style={{ gap: 14 }}>
+              <h1 className="mo-h1">{moment.name}</h1>
+              <span className="mo-pill" style={{ fontSize: 15, padding: '5px 14px', color: MOMENT_STAGE[stage].fg, background: MOMENT_STAGE[stage].bg }}>{MOMENT_STAGE[stage].label}</span>
+            </div>
+            {next && (
+              <p style={{ margin: '6px 0 0', fontSize: 14 }}>
+                <span className="mo-muted">Next: </span>
+                <Link href={`/moments/${moment.id}?step=${next.id}`} scroll={false} className="mo-step-title">{next.title}</Link>
+                <span className="mo-muted"> · {nameOf(next.assignee_id)} · {formatDue(next.due_date)} · </span>
+                <span style={{ color: STEP_STATUS[next.status].fg, fontWeight: 600 }}>{STEP_STATUS[next.status].label}</span>
+              </p>
+            )}
             <p className="mo-sub">
               {moment.brands && <Link href={`/brands/${moment.brands.id}`} className="mo-crumb">{moment.brands.name}</Link>}
               {' · '}Launch <b style={{ color: 'var(--text-primary)' }}>{formatDue(moment.launch_date)}</b>

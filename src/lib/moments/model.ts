@@ -175,6 +175,31 @@ export function groupStatus(children: Pick<MomentStep, 'status'>[]): StepStatus 
   return 'todo'
 }
 
+// ── stage ──────────────────────────────────────────────────────────────────
+// A moment's stage is the earliest phase that still has open work, so it shows
+// where the moment is actually held up, even when later steps started early.
+export type MomentStage = 'offer' | 'offer_approval' | 'brief' | 'production' | 'client_review' | 'client_edits' | 'launch' | 'launched'
+
+export const MOMENT_STAGE: Record<MomentStage, { label: string; fg: string; bg: string; keys: string[] }> = {
+  offer:          { label: 'Offer',            fg: '#475569', bg: 'rgba(148, 163, 184, 0.22)', keys: ['offer_draft', 'offer_internal_review'] },
+  offer_approval: { label: 'Offer approval',   fg: '#92400E', bg: 'rgba(245, 158, 11, 0.18)',  keys: ['offer_client_approval'] },
+  brief:          { label: 'Brief',            fg: '#4338CA', bg: 'rgba(99, 102, 241, 0.14)',  keys: ['brief'] },
+  production:     { label: 'In production',    fg: '#1D4ED8', bg: 'rgba(59, 130, 246, 0.14)',  keys: ['lp_build', 'lp_internal_review', 'cr_drafts', 'cr_internal_review'] },
+  client_review:  { label: 'Client review',    fg: '#92400E', bg: 'rgba(245, 158, 11, 0.18)',  keys: ['lp_client_review', 'cr_client_review'] },
+  client_edits:   { label: 'Client edits',     fg: '#BE123C', bg: 'rgba(244, 63, 94, 0.14)',   keys: ['lp_client_edits', 'cr_client_edits'] },
+  launch:         { label: 'Ready to launch',  fg: '#0E7490', bg: 'rgba(6, 182, 212, 0.16)',   keys: ['launch'] },
+  launched:       { label: 'Launched',         fg: '#3F6212', bg: 'rgba(101, 163, 13, 0.18)',  keys: [] },
+}
+const STAGE_SEQUENCE: MomentStage[] = ['offer', 'offer_approval', 'brief', 'production', 'client_review', 'client_edits', 'launch']
+
+export function momentStage(steps: Pick<MomentStep, 'key' | 'status' | 'is_group'>[]): MomentStage {
+  for (const stage of STAGE_SEQUENCE) {
+    const keys = MOMENT_STAGE[stage].keys
+    if (steps.some(s => !s.is_group && s.key && keys.includes(s.key) && isOpen(s.status))) return stage
+  }
+  return 'launched'
+}
+
 /** Steps in display order: top-level by sort_order, each group followed by its children. */
 export function orderSteps<T extends Pick<MomentStep, 'id' | 'parent_id' | 'sort_order'>>(steps: T[]): Array<T & { depth: number }> {
   const byParent = new Map<string | null, T[]>()
