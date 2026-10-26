@@ -1,0 +1,89 @@
+/* Moments, steps, My work. Uses the theme tokens only. */
+
+.mo-page { padding: 28px 32px 80px; max-width: 1240px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px; }
+.mo-crumb { font-size: 14px; color: var(--text-muted); text-decoration: none; }
+.mo-crumb:hover { color: var(--text-primary); }
+.mo-h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.01em; margin: 0; color: var(--text-primary); text-wrap: balance; }
+.mo-sub { font-size: 15px; color: var(--text-secondary); margin: 4px 0 0; }
+.mo-h2 { font-size: 18px; font-weight: 700; margin: 0; color: var(--text-primary); }
+.mo-muted { color: var(--text-muted); }
+.mo-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.mo-spread { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+
+.mo-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; box-shadow: 0 1px 2px rgba(70, 50, 20, 0.05); }
+.mo-panel-pad { padding: 20px 24px; }
+
+.mo-layout { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 24px; align-items: start; }
+@media (max-width: 1100px) { .mo-layout { grid-template-columns: 1fr; } }
+
+/* Step list */
+.mo-steps { width: 100%; border-collapse: collapse; }
+.mo-steps th { text-align: left; font-size: 13px; font-weight: 600; color: var(--text-muted); padding: 12px 16px; border-bottom: 1px solid var(--border); }
+.mo-steps td { padding: 10px 16px; border-bottom: 1px solid var(--border); vertical-align: middle; font-size: 15px; }
+.mo-steps tr:last-child td { border-bottom: none; }
+.mo-steps tr.mo-step:hover td { background: var(--surface-raised); }
+.mo-steps tr.mo-step.is-selected td { background: var(--accent-muted); }
+.mo-steps tr.mo-group td { background: var(--surface-2); font-weight: 700; font-size: 14px; color: var(--text-secondary); padding-top: 12px; padding-bottom: 12px; }
+.mo-step-title { color: var(--text-primary); text-decoration: none; font-weight: 500; display: inline-flex; align-items: center; gap: 8px; }
+.mo-step-title:hover { text-decoration: underline; text-underline-offset: 3px; }
+.mo-step-title.is-done { color: var(--text-muted); text-decoration: line-through; }
+.mo-indent { display: inline-block; width: 20px; }
+.mo-count { font-size: 13px; color: var(--text-muted); font-weight: 500; }
+
+/* Inline controls: look like text until hovered */
+.mo-inline { border: 1px solid transparent !important; background: transparent !important; padding: 6px 10px !important; border-radius: 8px !important; font-size: 14px !important; width: auto !important; cursor: pointer; color: var(--text-primary); min-height: 0; }
+.mo-inline:hover, .mo-inline:focus { border-color: var(--border-strong) !important; background: var(--surface) !important; }
+.mo-inline.is-empty { color: var(--text-muted); }
+.mo-inline.is-late { color: #B91C1C; font-weight: 600; }
+
+.mo-status { appearance: none; -webkit-appearance: none; border: none !important; border-radius: 999px !important; padding: 5px 12px !important; font-size: 13px !important; font-weight: 600; width: auto !important; cursor: pointer; }
+.mo-status:focus-visible { box-shadow: var(--focus-ring); }
+
+.mo-pill { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 4px 11px; font-size: 13px; font-weight: 600; white-space: nowrap; }
+.mo-late { color: #B91C1C; background: rgba(239, 68, 68, 0.12); }
+.mo-progress { height: 8px; background: var(--surface-2); border-radius: 999px; overflow: hidden; min-width: 120px; }
+.mo-progress > span { display: block; height: 100%; background: #65A30D; border-radius: 999px; }
+
+/* Side panel */
+.mo-side { position: sticky; top: 16px; display: flex; flex-direction: column; gap: 16px; max-height: calc(100vh - 32px); overflow: auto; }
+.mo-field { display: grid; grid-template-columns: 90px 1fr; gap: 8px 12px; align-items: center; font-size: 14px; }
+.mo-field > span { color: var(--text-muted); }
+
+/* Comments */
+.mo-thread { display: flex; flex-direction: column; gap: 14px; }
+.mo-comment { display: flex; flex-direction: column; gap: 4px; }
+.mo-comment-head { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.mo-comment-head b { font-weight: 600; color: var(--text-primary); }
+.mo-comment-body { font-size: 15px; line-height: 1.55; color: var(--text-primary); white-space: pre-wrap; }
+.mo-kind { font-size: 12px; font-weight: 700; border-radius: 6px; padding: 2px 7px; }
+.mo-kind-needs_action { color: #B91C1C; background: rgba(239, 68, 68, 0.12); }
+.mo-kind-fyi { color: #1D4ED8; background: rgba(59, 130, 246, 0.12); }
+.mo-kind-note { color: var(--text-secondary); background: var(--surface-2); }
+.mo-composer { display: flex; flex-direction: column; gap: 10px; }
+.mo-composer textarea { min-height: 84px; resize: vertical; }
+.mo-seg { display: inline-flex; border: 1px solid var(--border-strong); border-radius: 10px; overflow: hidden; }
+.mo-seg button { border: none; background: var(--surface); padding: 7px 12px; font-size: 13.5px; font-weight: 600; color: var(--text-secondary); cursor: pointer; }
+.mo-seg button + button { border-left: 1px solid var(--border-strong); }
+.mo-seg button[aria-pressed="true"] { background: var(--text-primary); color: var(--surface); }
+.mo-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.mo-chip { border: 1px solid var(--border-strong); background: var(--surface); border-radius: 999px; padding: 4px 10px; font-size: 13px; cursor: pointer; color: var(--text-secondary); }
+.mo-chip[aria-pressed="true"] { background: var(--accent-muted); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+
+/* Activity */
+.mo-activity { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.mo-activity li { display: grid; grid-template-columns: 1fr auto; gap: 8px; font-size: 14px; padding: 8px 0; border-bottom: 1px dashed var(--border); color: var(--text-secondary); }
+.mo-activity li:last-child { border-bottom: none; }
+.mo-activity time { color: var(--text-muted); font-size: 13px; white-space: nowrap; }
+
+/* Lists (moments, my work, inbox) */
+.mo-list { list-style: none; margin: 0; padding: 0; }
+.mo-list > li { display: grid; gap: 4px 16px; padding: 14px 20px; border-bottom: 1px solid var(--border); align-items: center; }
+.mo-list > li:last-child { border-bottom: none; }
+.mo-list a { color: var(--text-primary); text-decoration: none; }
+.mo-list a:hover { text-decoration: underline; text-underline-offset: 3px; }
+.mo-section-title { font-size: 14px; font-weight: 700; color: var(--text-secondary); padding: 12px 20px; background: var(--surface-2); border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; border-radius: 16px 16px 0 0; }
+.mo-empty { padding: 20px; color: var(--text-muted); font-size: 15px; }
+.mo-tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+.mo-tab { border: 1px solid var(--border-strong); background: var(--surface); color: var(--text-secondary); border-radius: 999px; padding: 7px 14px; font-size: 14px; font-weight: 600; text-decoration: none; }
+.mo-tab[aria-current="page"] { background: var(--text-primary); border-color: var(--text-primary); color: var(--surface); }
+.mo-error { color: #B91C1C; font-size: 14px; }

@@ -1,0 +1,129 @@
+import Link from 'next/link'
+import { redirect } from 'next/navigation'
+import { createClient, getCachedUser } from '@/lib/supabase/server'
+import { getCachedProfiles } from '@/lib/profiles'
+import { daysBetween, formatDue, todayIso, type InboxItem, type MomentStep } from '@/lib/moments/model'
+import { StatusSelect } from '@/components/moments/StepControls'
+import { ClearAllFyiButton, ClearButton } from '@/components/moments/MomentControls'
+import '@/components/moments/moments.css'
+
+type MyStep = MomentStep & { moments: { id: string; name: string; status: string } | null }
+
+export default async function MyWorkPage() {
+  const user = await getCachedUser()
+  if (!user) redirect('/login')
+  const supabase = await createClient()
+  const profiles = await getCachedProfiles()
+  const me = profiles.find(p => p.email === user.email?.toLowerCase())
+  if (!me) redirect('/')
+  const nameOf = (id: string | null) => profiles.find(p => p.id === id)?.full_name ?? 'Someone'
+
+  const [{ data: stepsRaw }, { data: inboxRaw }] = await Promise.all([
+    supabase.from('moment_steps').select('*, moments(id, name, status)')
+      .eq('assignee_id', me.id).eq('is_group', false).not('status', 'in', '(done,skipped)')
+      .order('due_date', { ascending: true, nullsFirst: false }),
+    supabase.from('inbox_items').select('*').eq('recipient_id', me.id).is('cleared_at', null).order('created_at', { ascending: false }),
+  ])
+  const steps = ((stepsRaw ?? []) as MyStep[]).filter(s => s.moments?.status === 'active' || s.moments?.status === 'on_hold')
+  const inbox = (inboxRaw ?? []) as InboxItem[]
+  const today = todayIso()
+
+  const buckets: Array<{ key: string; title: string; items: MyStep[] }> = [
+    { key: 'late', title: 'Overdue', items: steps.filter(s => s.due_date && s.due_date < today) },
+    { key: 'today', title: 'Due today', items: steps.filter(s => s.due_date === today) },
+    { key: 'week', title: 'Next 7 days', items: steps.filter(s => s.due_date && s.due_date > today && daysBetween(today, s.due_date) <= 7) },
+    { key: 'later', title: 'Later', items: steps.filter(s => s.due_date && daysBetween(today, s.due_date) > 7) },
+    { key: 'none', title: 'No due date', items: steps.filter(s => !s.due_date) },
+  ]
+  const actions = inbox.filter(i => i.kind === 'needs_action')
+  const fyis = inbox.filter(i => i.kind === 'fyi')
+  const link = (i: InboxItem) => (i.moment_id ? `/moments/${i.moment_id}${i.step_id ? `?step=${i.step_id}` : ''}` : '/moments')
+  const ago = (iso: string) => {
+    const d = daysBetween(iso.slice(0, 10), today)
+    return d <= 0 ? 'today' : d === 1 ? 'yesterday' : `${d} days ago`
+  }
+
+  return (
+    <div className="mo-page">
+      <div>
+        <h1 className="mo-h1">My work</h1>
+        <p className="mo-sub">
+          {buckets[0].items.length > 0 ? `${buckets[0].items.length} overdue · ` : ''}
+          {buckets[1].items.length} due today · {actions.length} need{actions.length === 1 ? 's' : ''} your action
+        </p>
+      </div>
+
+      <div className="mo-layout">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          {buckets.filter(b => b.items.length > 0 || b.key === 'today').map(b => (
+            <section key={b.key} className="mo-panel" aria-label={b.title}>
+              <div className="mo-section-title" style={b.key === 'late' ? { color: '#B91C1C' } : undefined}>
+                <span>{b.title}</span><span className="mo-count">{b.items.length}</span>
+              </div>
+              {b.items.length === 0 ? <p className="mo-empty">Nothing due today.</p> : (
+                <ul className="mo-list">
+                  {b.items.map(s => (
+                    <li key={s.id} style={{ gridTemplateColumns: 'minmax(0, 1fr) auto auto' }}>
+                      <div>
+                        <Link href={`/moments/${s.moment_id}?step=${s.id}`} style={{ fontWeight: 600 }}>{s.title}</Link>
+                        <div className="mo-muted" style={{ fontSize: 14 }}>{s.moments?.name}</div>
+                      </div>
+                      <span style={{ fontSize: 14, fontWeight: b.key === 'late' ? 700 : 500, color: b.key === 'late' ? '#B91C1C' : 'var(--text-secondary)' }}>
+                        {formatDue(s.due_date)}{b.key === 'late' && s.due_date ? ` · ${daysBetween(s.due_date, today)}d late` : ''}
+                      </span>
+                      <StatusSelect stepId={s.id} status={s.status} label={`Status of ${s.title}`} />
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          ))}
+          {steps.length === 0 && <section className="mo-panel"><p className="mo-empty">You have no open steps. Nice.</p></section>}
+        </div>
+
+        <aside className="mo-side">
+          <section className="mo-panel" aria-label="Needs your action">
+            <div className="mo-section-title" style={{ color: actions.length ? '#B91C1C' : undefined }}>
+              <span>Needs your action</span><span className="mo-count">{actions.length}</span>
+            </div>
+            {actions.length === 0 ? <p className="mo-empty">Nothing waiting on you.</p> : (
+              <ul className="mo-list">
+                {actions.map(i => (
+                  <li key={i.id} style={{ gridTemplateColumns: 'minmax(0, 1fr) auto' }}>
+                    <div>
+                      <Link href={link(i)} style={{ fontWeight: 600 }}>{i.title}</Link>
+                      {i.body && <div style={{ fontSize: 14, color: 'var(--text-secondary)' }}>{i.body}</div>}
+                      <div className="mo-muted" style={{ fontSize: 13 }}>From {nameOf(i.actor_id)} · {ago(i.created_at)}</div>
+                    </div>
+                    <ClearButton id={i.id} label="Done" />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          <section className="mo-panel" aria-label="FYI">
+            <div className="mo-section-title">
+              <span>FYI</span>
+              {fyis.length > 0 ? <ClearAllFyiButton /> : <span className="mo-count">0</span>}
+            </div>
+            {fyis.length === 0 ? <p className="mo-empty">You&apos;re caught up.</p> : (
+              <ul className="mo-list">
+                {fyis.map(i => (
+                  <li key={i.id} style={{ gridTemplateColumns: 'minmax(0, 1fr) auto' }}>
+                    <div>
+                      <Link href={link(i)} style={{ fontWeight: 600 }}>{i.title}</Link>
+                      {i.body && <div style={{ fontSize: 14, color: 'var(--text-secondary)' }}>{i.body}</div>}
+                      <div className="mo-muted" style={{ fontSize: 13 }}>{nameOf(i.actor_id)} · {ago(i.created_at)}</div>
+                    </div>
+                    <ClearButton id={i.id} />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </aside>
+      </div>
+    </div>
+  )
+}

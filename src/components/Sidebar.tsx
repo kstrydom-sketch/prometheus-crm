@@ -44,6 +44,24 @@ const DashboardIcon = (
   </svg>
 )
 
+const MyWorkIcon = (
+  <svg width={iconSize} height={iconSize} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M9 11l2 2 4-4" />
+    <rect x="3" y="3" width="18" height="18" rx="3" />
+  </svg>
+)
+
+const MomentsIcon = (
+  <svg width={iconSize} height={iconSize} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="8" y1="6" x2="21" y2="6" />
+    <line x1="8" y1="12" x2="21" y2="12" />
+    <line x1="8" y1="18" x2="21" y2="18" />
+    <circle cx="4" cy="6" r="1" fill="currentColor" />
+    <circle cx="4" cy="12" r="1" fill="currentColor" />
+    <circle cx="4" cy="18" r="1" fill="currentColor" />
+  </svg>
+)
+
 const FinancialsIcon = (
   <svg width={iconSize} height={iconSize} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
     <line x1="12" y1="3" x2="12" y2="21" />
@@ -166,6 +184,18 @@ export default function Sidebar({ email, showFinancials, capacity = null, showCo
   }, [collapsed, ready])
 
   const items: NavItem[] = [
+    {
+      href: '/my-work',
+      label: 'My work',
+      matches: (p) => p.startsWith('/my-work'),
+      icon: MyWorkIcon,
+    },
+    {
+      href: '/moments',
+      label: 'Moments',
+      matches: (p) => p.startsWith('/moments'),
+      icon: MomentsIcon,
+    },
     {
       href: '/',
       label: 'Dashboard',
