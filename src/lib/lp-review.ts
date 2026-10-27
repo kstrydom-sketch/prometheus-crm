@@ -76,6 +76,9 @@ const AFTER_INTERNAL: Stage[] = ['client_review', 'ready', 'live']
 export function lpMoveRoute(from: string | null | undefined, to: Stage): LpMoveRoute {
   const f = normalizeStage(from)
   if (f === to) return { kind: 'ok' }
+  // Client revisions go straight back to the client: the client asked for the
+  // changes, so they check them. (Internal revisions are lp_internal_step.)
+  if (f === 'revisions' && to === 'client_review') return { kind: 'ok' }
   if (BUILD_STAGES.includes(f)) {
     if (to === 'internal_review') return { kind: 'submit' }
     if (AFTER_INTERNAL.includes(to)) {

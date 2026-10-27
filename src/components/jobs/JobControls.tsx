@@ -107,12 +107,12 @@ export function DeleteStepButton({ stepId, jobId }: { stepId: string; jobId: str
   )
 }
 
-type Brand = { id: string; name: string }
+type Brand = { id: string; name: string; billingDay?: number | null }
 type TemplateOption = Pick<WorkflowTemplate, 'id' | 'name' | 'description' | 'uses_month_slot' | 'due_label' | 'steps' | 'stages'>
 
-function ClientSelect({ id, brands }: { id: string; brands: Brand[] }) {
+function ClientSelect({ id, brands, onPick }: { id: string; brands: Brand[]; onPick?: (b: Brand | null) => void }) {
   return (
-    <select id={id} name="brand_id" required defaultValue="">
+    <select id={id} name="brand_id" required defaultValue="" onChange={e => onPick?.(brands.find(b => b.id === e.target.value) ?? null)}>
       <option value="" disabled>Choose a client</option>
       <option value="internal">Internal (no client)</option>
       {brands.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
@@ -135,6 +135,21 @@ export function NewWorkButtons(props: { brands: Brand[]; people: Person[]; defau
 
 const formStyle = { display: 'grid', gap: 16, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', alignItems: 'end', width: '100%' } as const
 
+const ordinal = (n: number) => `${n}${n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'}`
+
+/** The next date (today or later) falling on the client's billing day, clamped to short months. */
+function nextBillingDate(day: number): string {
+  const now = new Date()
+  const today = now.toISOString().slice(0, 10)
+  for (let add = 0; add < 3; add++) {
+    const y = now.getUTCFullYear(), m = now.getUTCMonth() + add
+    const last = new Date(Date.UTC(y, m + 1, 0)).getUTCDate()
+    const d = new Date(Date.UTC(y, m, Math.min(day, last))).toISOString().slice(0, 10)
+    if (d >= today) return d
+  }
+  return today
+}
+
 function NewJobForm({ brands, people, defaultOwner, templates, defaultTemplate, onCancel }: {
   brands: Brand[]; people: Person[]; defaultOwner: string | null; templates: TemplateOption[]; defaultTemplate: string | null; onCancel: () => void
 }) {
@@ -144,6 +159,8 @@ function NewJobForm({ brands, people, defaultOwner, templates, defaultTemplate, 
   const template = templates.find(t => t.id === templateId)
   const nextMonth = (() => { const d = new Date(); d.setUTCMonth(d.getUTCMonth() + 1); return d.toISOString().slice(0, 7) })()
   const days = template ? templateLength(template.steps) : 0
+  const [brand, setBrand] = useState<Brand | null>(null)
+  const [start, setStart] = useState(new Date().toISOString().slice(0, 10))
   return (
     <form className="mo-panel mo-panel-pad" style={formStyle}
       onSubmit={e => {
@@ -159,7 +176,10 @@ function NewJobForm({ brands, people, defaultOwner, templates, defaultTemplate, 
         <select id="nj-template" name="template_id" value={templateId} onChange={e => setTemplateId(e.target.value)} required>
           {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
         </select></div>
-      <div><label htmlFor="nj-brand">Client</label><ClientSelect id="nj-brand" brands={brands} /></div>
+      <div><label htmlFor="nj-brand">Client</label><ClientSelect id="nj-brand" brands={brands} onPick={b => {
+        setBrand(b)
+        if (b?.billingDay) setStart(nextBillingDate(b.billingDay))
+      }} /></div>
       {template?.uses_month_slot ? (
         <>
           <div><label htmlFor="nj-month">Month it&apos;s for</label><input id="nj-month" type="month" name="target_month" defaultValue={nextMonth} required /></div>
@@ -170,7 +190,8 @@ function NewJobForm({ brands, people, defaultOwner, templates, defaultTemplate, 
         <div><label htmlFor="nj-name">Name <span className="mo-muted">(optional)</span></label>
           <input id="nj-name" name="name" placeholder={template ? `Client · ${template.name}` : ''} /></div>
       )}
-      <div><label htmlFor="nj-start">Starts (day 0)</label><input id="nj-start" type="date" name="start_date" defaultValue={new Date().toISOString().slice(0, 10)} required /></div>
+      <div><label htmlFor="nj-start">Starts (day 0)</label><input id="nj-start" type="date" name="start_date" value={start} onChange={e => setStart(e.target.value)} required />
+        {brand && <small className="mo-muted" style={{ display: 'block', marginTop: 4 }}>{brand.billingDay ? `Bills on the ${ordinal(brand.billingDay)}, so it starts then` : 'No billing day on file'}</small>}</div>
       <div><label htmlFor="nj-owner">Owner</label>
         <select id="nj-owner" name="owner_id" defaultValue={defaultOwner ?? ''}>
           {people.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}

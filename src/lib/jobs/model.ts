@@ -115,7 +115,7 @@ export interface InboxItem {
   step_id: string | null
   comment_id: string | null
   kind: 'needs_action' | 'fyi'
-  reason: 'assigned' | 'mentioned' | 'following' | 'comment_on_my_step' | 'reply'
+  reason: 'assigned' | 'mentioned' | 'following' | 'comment_on_my_step' | 'reply' | 'review'
   actor_id: string | null
   title: string
   body: string | null

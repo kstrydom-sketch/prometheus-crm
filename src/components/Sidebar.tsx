@@ -77,21 +77,6 @@ const ResultsIcon = (
   </svg>
 )
 
-const PipelineIcon = (
-  <svg width={iconSize} height={iconSize} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-    <rect x="3" y="4" width="4" height="16" rx="1" />
-    <rect x="10" y="4" width="4" height="10" rx="1" />
-    <rect x="17" y="4" width="4" height="6" rx="1" />
-  </svg>
-)
-
-const OffersIcon = (
-  <svg width={iconSize} height={iconSize} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M20.6 13.4L11 3.8A2 2 0 009.6 3.2H5a2 2 0 00-2 2v4.6c0 .5.2 1 .6 1.4l9.6 9.6a2 2 0 002.8 0l4.6-4.6a2 2 0 000-2.8z" />
-    <circle cx="7.5" cy="7.5" r="1" fill="currentColor" stroke="none" />
-  </svg>
-)
-
 const CalendarIcon = (
   <svg width={iconSize} height={iconSize} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
     <rect x="3" y="5" width="18" height="16" rx="2" />
@@ -218,18 +203,9 @@ export default function Sidebar({ email, showFinancials, capacity = null, showCo
       matches: (p) => p.startsWith('/results'),
       icon: ResultsIcon,
     },
-    {
-      href: '/offers',
-      label: 'Offers',
-      matches: (p) => p.startsWith('/offers'),
-      icon: OffersIcon,
-    },
-    {
-      href: '/pipeline',
-      label: 'Pipeline',
-      matches: (p) => p.startsWith('/pipeline'),
-      icon: PipelineIcon,
-    },
+    // The Offers and Pipeline boards are replaced by Jobs: each job's steps
+    // follow its offer and production cards (20261030_review_rounds.sql).
+    // The card pages stay, reached from a job's steps.
     {
       href: '/calendar',
       label: 'Calendar',

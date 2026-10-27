@@ -12,6 +12,7 @@ import {
   addWorkingDays, isOpen, monthLabel, templateLength,
   type CommentKind, type JobStatus, type StepStatus, type WorkflowTemplate,
 } from './model'
+import { isLinkedStep } from './review'
 
 type Result = { ok: true } | { ok: false; error: string }
 
@@ -108,6 +109,15 @@ export async function createJob(formData: FormData): Promise<{ ok: true; id: str
     await supabase.from('jobs').delete().eq('id', job.id)
     return created
   }
+  // A workflow with offer steps gets its offer card straight away, so the
+  // offer's review drives those steps from the start. Added after the steps:
+  // the card's trigger links it to the job and syncs them.
+  if (brand.id && targetMonth && template.steps.some(s => s.key === 'offer_draft')) {
+    const { error: offerErr } = await supabase.from('offer_cards').insert({
+      brand_id: brand.id, target_month: targetMonth, moment_slot: slot ?? 1, name, job_id: job.id, created_by: user.id,
+    })
+    if (offerErr) console.error('[createJob] offer card failed:', offerErr.message)
+  }
   await follow(supabase, job.id, user.id)
   await follow(supabase, job.id, ownerId)
   if (ownerId !== user.id) {
@@ -196,10 +206,15 @@ export async function updateStep(
   if (!auth.ok) return auth
   const { supabase, user } = auth
 
-  const { data: step } = await supabase.from('job_steps').select('id, job_id, title, assignee_id, jobs(name, kind, status)').eq('id', stepId).single()
+  const { data: step } = await supabase.from('job_steps').select('id, job_id, key, title, assignee_id, jobs(name, kind, status, offer_card_id, project_id)').eq('id', stepId).single()
   if (!step) return { ok: false, error: 'Step not found.' }
   const clean: Record<string, unknown> = {}
-  if (patch.status) clean.status = patch.status
+  if (patch.status) {
+    // A linked step moves with its card's review, never by hand.
+    const links = step.jobs as unknown as { offer_card_id: string | null; project_id: string | null } | null
+    if (links && isLinkedStep(step, links)) return { ok: false, error: 'This step moves with the review. Use the review buttons on the step.' }
+    clean.status = patch.status
+  }
   if ('assignee_id' in patch) clean.assignee_id = patch.assignee_id || null
   if ('due_date' in patch) clean.due_date = patch.due_date || null
   if (patch.title !== undefined) {

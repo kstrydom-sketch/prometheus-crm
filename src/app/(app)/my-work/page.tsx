@@ -2,12 +2,13 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createClient, getCachedUser } from '@/lib/supabase/server'
 import { getCachedProfiles } from '@/lib/profiles'
-import { daysBetween, formatDue, todayIso, type InboxItem, type JobStep } from '@/lib/jobs/model'
+import { daysBetween, formatDue, STEP_STATUS, todayIso, type InboxItem, type JobStep } from '@/lib/jobs/model'
 import { StatusSelect } from '@/components/jobs/StepControls'
+import { isLinkedStep } from '@/lib/jobs/review'
 import { ClearAllFyiButton, ClearButton } from '@/components/jobs/JobControls'
 import '@/components/jobs/jobs.css'
 
-type MyStep = JobStep & { jobs: { id: string; name: string; status: string; kind: string; brands: { name: string } | null } | null }
+type MyStep = JobStep & { jobs: { id: string; name: string; status: string; kind: string; offer_card_id: string | null; project_id: string | null; brands: { name: string } | null } | null }
 
 export default async function MyWorkPage() {
   const user = await getCachedUser()
@@ -19,7 +20,7 @@ export default async function MyWorkPage() {
   const nameOf = (id: string | null) => profiles.find(p => p.id === id)?.full_name ?? 'Someone'
 
   const [{ data: stepsRaw }, { data: inboxRaw }] = await Promise.all([
-    supabase.from('job_steps').select('*, jobs(id, name, status, kind, brands(name))')
+    supabase.from('job_steps').select('*, jobs(id, name, status, kind, offer_card_id, project_id, brands(name))')
       .eq('assignee_id', me.id).eq('is_group', false).not('status', 'in', '(done,skipped)')
       .order('due_date', { ascending: true, nullsFirst: false }),
     supabase.from('inbox_items').select('*').eq('recipient_id', me.id).is('cleared_at', null).order('created_at', { ascending: false }),
@@ -71,7 +72,9 @@ export default async function MyWorkPage() {
                       <span style={{ fontSize: 14, fontWeight: b.key === 'late' ? 700 : 500, color: b.key === 'late' ? '#B91C1C' : 'var(--text-secondary)' }}>
                         {formatDue(s.due_date)}{b.key === 'late' && s.due_date ? ` · ${daysBetween(s.due_date, today)}d late` : ''}
                       </span>
-                      <StatusSelect stepId={s.id} status={s.status} label={`Status of ${s.title}`} />
+                      {s.jobs && isLinkedStep(s, s.jobs)
+                        ? <Link href={`/jobs/${s.job_id}?step=${s.id}`} className="mo-pill" title="Moves with the review: open it to act" style={{ color: STEP_STATUS[s.status].fg, background: STEP_STATUS[s.status].bg, textDecoration: 'none' }}>{STEP_STATUS[s.status].label}</Link>
+                        : <StatusSelect stepId={s.id} status={s.status} label={`Status of ${s.title}`} />}
                     </li>
                   ))}
                 </ul>

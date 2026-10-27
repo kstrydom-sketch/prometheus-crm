@@ -33,7 +33,7 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
   const [{ data: jobsRaw }, { data: stepsRaw }, { data: brandsRaw }, { data: followRaw }, { data: templatesRaw }] = await Promise.all([
     supabase.from('jobs').select('*, brands(name)').order('due_date', { ascending: true, nullsFirst: false }),
     supabase.from('job_steps').select('id, job_id, parent_id, key, title, is_group, sort_order, assignee_id, due_date, status, stage'),
-    supabase.from('brands').select('id, name').eq('is_active', true).order('name'),
+    supabase.from('brands').select('id, name, billing_subscriptions(anchor_day, status)').eq('is_active', true).order('name'),
     me ? supabase.from('job_followers').select('job_id').eq('profile_id', me.id) : Promise.resolve({ data: [] }),
     supabase.from('workflow_templates').select('*').order('sort_order').order('name'),
   ])
@@ -101,7 +101,11 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
           </p>
         </div>
         <NewWorkButtons
-          brands={brandsRaw ?? []}
+          brands={((brandsRaw ?? []) as unknown as Array<{ id: string; name: string; billing_subscriptions: { anchor_day: number; status: string }[] | null }>).map(b => ({
+            id: b.id, name: b.name,
+            // Deadlines run from the day the client's billing renews.
+            billingDay: b.billing_subscriptions?.find(x => x.status === 'active')?.anchor_day ?? null,
+          }))}
           people={profiles.filter(p => p.can_edit).map(p => ({ id: p.id, name: profileName(p) }))}
           defaultOwner={me?.id ?? null}
           templates={live.map(t => ({ id: t.id, name: t.name, description: t.description, uses_month_slot: t.uses_month_slot, due_label: t.due_label, steps: t.steps, stages: t.stages }))}
