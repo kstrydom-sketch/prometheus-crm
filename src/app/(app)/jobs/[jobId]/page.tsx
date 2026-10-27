@@ -13,6 +13,8 @@ import CommentThreads from '@/components/jobs/CommentThreads'
 import {
   AddStepForm, DeleteStepButton, FollowButton, JobOwnerSelect, JobStatusSelect, RescheduleForm,
 } from '@/components/jobs/JobControls'
+import ClientRulesCallout from '@/components/brand/ClientRulesCallout'
+import { loadRules } from '@/lib/brands/profile'
 import '@/components/jobs/jobs.css'
 
 const when = (iso: string) =>
@@ -60,6 +62,7 @@ export default async function JobPage({
   const describe = (a: ActivityRow) => describeActivity(a, nameOf, stepTitle, job)
   const next = work.find(s => isOpen(s.status))
   const commentCount = (stepId: string) => comments.filter(c => c.step_id === stepId).length
+  const rules = job.brands ? await loadRules(supabase, job.brands.id) : []
 
   return (
     <div className="mo-page">
@@ -103,6 +106,10 @@ export default async function JobPage({
           {job.project_id && job.brands && <Link href={`/brands/${job.brands.id}/projects/${job.project_id}`} className="mo-crumb">Old production card →</Link>}
         </div>
       </header>
+
+      {job.brands && rules.length > 0 && (
+        <ClientRulesCallout brandId={job.brands.id} brandName={job.brands.name} rules={rules} surface="all" />
+      )}
 
       <div className="mo-layout">
         <section className="mo-panel" aria-label="Steps">

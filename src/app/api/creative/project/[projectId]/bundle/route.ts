@@ -71,7 +71,7 @@ export async function GET(
     return NextResponse.json({ error: 'Project not in token scope.' }, { status: 403 })
   }
 
-  const [brandRes, dnaRes, imagesRes] = await Promise.all([
+  const [brandRes, dnaRes, imagesRes, rulesRes] = await Promise.all([
     supabase.from('brands').select('id, name, website, brand_notes, ai_sensitivity, brand_guidelines').eq('id', project.brand_id).maybeSingle(),
     supabase
       .from('brand_dna')
@@ -82,7 +82,16 @@ export async function GET(
       .limit(1)
       .maybeSingle(),
     supabase.from('project_images').select('storage_url').eq('project_id', project.id),
+    // Standing client feedback. Tolerant of 20261029_brand_profile.sql not
+    // having run: an error is an empty list.
+    supabase
+      .from('client_rules')
+      .select('area, rule, why, client_rule_mentions(count)')
+      .eq('brand_id', project.brand_id)
+      .eq('status', 'active'),
   ])
+  const clientRules = ((rulesRes.data ?? []) as unknown as Array<{ area: string; rule: string; why: string | null; client_rule_mentions: Array<{ count: number }> }>)
+    .map(r => ({ area: r.area, rule: r.rule, why: r.why, times_told: r.client_rule_mentions?.[0]?.count ?? 0 }))
 
   const brand = brandRes.data as {
     id: string; name: string; website: string | null
@@ -104,6 +113,10 @@ export async function GET(
       notes: brand.brand_notes ?? null,
       guidelines: brand.brand_guidelines ?? null,
       ai_sensitivity: brand.ai_sensitivity ?? null,
+      // Feedback the client has given that holds for all their work. Every
+      // generated piece must follow these; times_told > 1 means we already
+      // missed it once.
+      client_rules: clientRules,
     } : null,
     brand_dna: dna,
     project: {

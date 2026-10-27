@@ -4,6 +4,8 @@ import { createClient, getCachedUser } from '@/lib/supabase/server'
 import { canEdit } from '@/lib/permissions'
 import InternalReviewPanel from '@/components/InternalReviewPanel'
 import type { Project, CreativeAsset, ProjectComment } from '@/lib/types'
+import ClientRulesCallout from '@/components/brand/ClientRulesCallout'
+import { loadRules } from '@/lib/brands/profile'
 
 // AI revision/edit Server Actions (gpt-image-2) run ~60-90s. Without this they hit
 // Vercel's default function timeout and the client gets "unexpected response from
@@ -33,7 +35,7 @@ export default async function InternalReviewPage({
 
   // Internal sees EVERYTHING (no client_visible filter) — internal review is
   // about what's about-to-be-published OR being-iterated.
-  const [{ data: assetsRaw }, { data: commentsRaw }] = await Promise.all([
+  const [{ data: assetsRaw }, { data: commentsRaw }, { data: brandRow }, rules] = await Promise.all([
     supabase
       .from('creative_assets')
       .select('*')
@@ -46,6 +48,8 @@ export default async function InternalReviewPage({
       .eq('project_id', projectId)
       .eq('track', 'image')
       .order('created_at'),
+    supabase.from('brands').select('name').eq('id', brandId).maybeSingle(),
+    loadRules(supabase, brandId),
   ])
 
   const assets = (assetsRaw ?? []) as CreativeAsset[]
@@ -68,6 +72,14 @@ export default async function InternalReviewPage({
           <span style={{ opacity: 0.5 }}>/</span>
           <span style={{ color: 'var(--text-primary)' }}>Internal review</span>
         </div>
+        {/* The last check before the client sees it: anything here they have already told us. */}
+        <ClientRulesCallout
+          brandId={brandId}
+          brandName={brandRow?.name ?? 'This client'}
+          rules={rules}
+          surface="creatives"
+          title={`Check against what ${brandRow?.name ?? 'the client'} has told us`}
+        />
         <InternalReviewPanel
           projectId={projectId}
           brandId={brandId}

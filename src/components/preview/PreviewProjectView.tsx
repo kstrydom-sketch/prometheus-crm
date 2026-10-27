@@ -8,6 +8,8 @@ import StageTracker from '@/components/StageTracker'
 import CopyDeckPanel from '@/components/CopyDeckPanel'
 import CreativeAssetsManager from '@/components/CreativeAssetsManager'
 import ClientFeedbackPanel from '@/components/ClientFeedbackPanel'
+import ClientRulesCallout from '@/components/brand/ClientRulesCallout'
+import type { RuleWithMentions } from '@/lib/brands/profile'
 import CampaignTrackingPanel from '@/components/CampaignTrackingPanel'
 import NotesThread from '@/components/NotesThread'
 import ConfirmDeleteForm from '@/components/ConfirmDeleteForm'
@@ -365,7 +367,7 @@ function CommentList({ comments, empty }: { comments: ProjectComment[]; empty: s
 
 export default function PreviewProjectView({
   project: p, brand, assets, comments, images, dna, revisionsByAsset, lpEditorName, creativeEditorName, journeyName, journeys, profiles, campaigns, todayIso, authorName, brandLandingPages, brandComments, brandDocuments, projectBriefs: allBriefs, serverNow, currentUserId,
-  lpTracking, lpAdMatches, lpDaily, accountDaily, nowMs, brandAdAccount, sourceOffer = null, liquidFiles = [],
+  lpTracking, lpAdMatches, lpDaily, accountDaily, nowMs, brandAdAccount, sourceOffer = null, liquidFiles = [], clientRules = [],
 }: {
   project: Project; brand: Brand; assets: CreativeAsset[]; comments: ProjectComment[]
   images: ProjectImage[]; dna: BrandDna | null
@@ -376,6 +378,8 @@ export default function PreviewProjectView({
   brandComments: BrandComment[]
   brandDocuments: BrandDocument[]
   projectBriefs: ProjectBrief[]
+  /** The brand's standing client feedback (client_rules), active only. */
+  clientRules?: RuleWithMentions[]
   /** Server clock at render, for judging whether a brief's AI read is stale. */
   serverNow: number
   currentUserId: string | null
@@ -1099,6 +1103,7 @@ export default function PreviewProjectView({
           )}
           {tab === 'overview' && (
             <>
+              {brand?.id && <ClientRulesCallout brandId={brand.id} brandName={brand.name} rules={clientRules} surface="all" />}
               {/* First thing on the tab, by design — "anytime you open up a
                   project it's the first thing that you see". Lives on the brand,
                   so every project for this client shows the same notes. */}
@@ -1428,6 +1433,7 @@ export default function PreviewProjectView({
 
           {tab === 'lp' && (
             <>
+              {brand?.id && <ClientRulesCallout brandId={brand.id} brandName={brand.name} rules={clientRules} surface="landing_page" />}
               <LpNextStep
                 project={p}
                 checklist={lpChecklist}
@@ -1897,6 +1903,7 @@ export default function PreviewProjectView({
                     brandId={p.brand_id}
                     reviewToken={p.share_token}
                     canResolve
+                    rules={clientRules}
                   />
 
                 </Card>
@@ -1927,6 +1934,7 @@ export default function PreviewProjectView({
 
           {tab === 'creatives' && (
             <>
+              {brand?.id && <ClientRulesCallout brandId={brand.id} brandName={brand.name} rules={clientRules} surface="creatives" />}
               {/* First thing on the tab, because it is the first thing an editor
                   does — nothing below works until the folder is synced. It was
                   behind a disclosure in the last card. */}

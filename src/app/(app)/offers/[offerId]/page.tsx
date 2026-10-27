@@ -6,6 +6,8 @@ import { getCachedProfiles } from '@/lib/profiles'
 import { offerMonthLabel, type Brand, type BrandDna, type OfferCard } from '@/lib/types'
 import { buildOfferHistory, type OfferHistoryCard, type OfferHistoryProject } from '@/lib/offer-history'
 import OfferCardDetail from '@/components/OfferCardDetail'
+import ClientRulesCallout from '@/components/brand/ClientRulesCallout'
+import { loadRules } from '@/lib/brands/profile'
 
 type OfferBrand = Pick<Brand,
   'id' | 'name' | 'website' | 'brand_notes' | 'growth_strategist' | 'profit_engineer' | 'start_date' | 'client_token'
@@ -44,6 +46,7 @@ export default async function OfferPage({
     { data: dnaRaw },
     { data: brandOffersRaw },
     { data: brandProjectsRaw },
+    rules,
   ] = await Promise.all([
     supabase
       .from('brand_dna')
@@ -61,6 +64,7 @@ export default async function OfferPage({
       .select('id, brand_id, name, due_date, created_at, marketing_moment, source_offer_card_id, offer_dynamics_type, offer, offer_description, product_featured, retail_price, page_type, discount, tiered_offer, shopify_coupon_code, is_complete, lp_stage, creatives_stage, brands(id, name)')
       .eq('brand_id', card.brand_id)
       .order('due_date', { ascending: false }),
+    loadRules(supabase, card.brand_id),
   ])
 
   const history = buildOfferHistory(
@@ -86,6 +90,9 @@ export default async function OfferPage({
           {offerMonthLabel(card.target_month)} · M{card.moment_slot} Offer
         </p>
       </div>
+
+      {/* Before the offer is written: what this client has already ruled out. */}
+      <ClientRulesCallout brandId={card.brand_id} brandName={card.brands.name} rules={rules} surface="offers" />
 
       <OfferCardDetail
         card={card}

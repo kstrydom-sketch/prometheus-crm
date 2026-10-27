@@ -3837,7 +3837,7 @@ export async function createBrandDocumentUploadUrl(
 // megabyte starts failing again.
 export async function attachBrandDocument(
   brandId: string,
-  input: { path: string; fileName: string; contentType: string; byteSize: number },
+  input: { path: string; fileName: string; contentType: string; byteSize: number; kind?: 'guidelines' | 'intake' | 'other' },
   revalidateProjectId?: string,
 ): Promise<{ ok: true; documentId: string } | { ok: false; error: string }> {
   const supabase = await createClient()
@@ -3876,6 +3876,9 @@ export async function attachBrandDocument(
       byte_size: Math.round(input.byteSize),
       uploaded_by: user.id,
       uploaded_by_name: uploadedByName,
+      // Only when the brand page set one: the column arrives with
+      // 20261029_brand_profile.sql, and other callers must keep working without it.
+      ...(input.kind && ['guidelines', 'intake', 'other'].includes(input.kind) ? { kind: input.kind } : {}),
     })
     .select('id')
     .single()

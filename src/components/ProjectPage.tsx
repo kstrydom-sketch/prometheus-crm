@@ -9,6 +9,7 @@ import type { Project, Brand, CreativeAsset, ProjectComment, BrandDna, ProjectIm
 import PreviewProjectView, { type BrandLandingPage } from '@/components/preview/PreviewProjectView'
 import type { LpBriefSourceOffer } from '@/lib/markdown-export'
 import type { LpLiquidFile } from '@/lib/lp-review'
+import { loadRules } from '@/lib/brands/profile'
 
 // PREVIEW ROUTE — deliberately not in the sidebar nav.
 //
@@ -128,7 +129,10 @@ export default async function ProjectPage({ projectId }: { projectId: string }) 
   ])
 
   const assets = (assetsRaw ?? []) as CreativeAsset[]
-  const revisionsByAsset = await getRevisionsByAsset(supabase, assets.map(a => a.id))
+  const [revisionsByAsset, clientRules] = await Promise.all([
+    getRevisionsByAsset(supabase, assets.map(a => a.id)),
+    loadRules(supabase, p.brand_id),
+  ])
 
   // Same idiom as /results/page.tsx: captured once per request, drives the
   // freshness stamp.
@@ -219,6 +223,7 @@ export default async function ProjectPage({ projectId }: { projectId: string }) 
       brandAdAccount={brandAdAccount}
       sourceOffer={(sourceOfferRaw ?? null) as LpBriefSourceOffer | null}
       liquidFiles={(liquidFilesRaw ?? []) as LpLiquidFile[]}
+      clientRules={clientRules}
     />
   )
 }

@@ -1,5 +1,7 @@
 import type { ProjectComment, CreativeAsset } from '@/lib/types'
 import FeedbackComment from '@/components/FeedbackComment'
+import SaveAsRule from '@/components/brand/SaveAsRule'
+import type { RuleWithMentions } from '@/lib/brands/profile'
 
 // Read-only consolidation of everything the client left on the review link:
 // landing-page feedback (by section) and per-creative feedback (with pins),
@@ -25,6 +27,7 @@ export default function ClientFeedbackPanel({
   brandId,
   canResolve,
   reviewToken = null,
+  rules,
 }: {
   lpFeedback: ProjectComment[]
   creativeFeedback: ProjectComment[]
@@ -37,6 +40,9 @@ export default function ClientFeedbackPanel({
   /** The project's share token, so a pinned comment can link to its spot on
    *  the client review page. Null when no link has been generated yet. */
   reviewToken?: string | null
+  /** The brand's client rules. When given, each comment offers to become one,
+   *  or to count as the client repeating one. */
+  rules?: RuleWithMentions[]
 }) {
   const total = lpFeedback.length + creativeFeedback.length
   const doneCount = [...lpFeedback, ...creativeFeedback].filter(c => c.resolved_at != null).length
@@ -99,16 +105,20 @@ export default function ClientFeedbackPanel({
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {lpFeedback.map(c => (
-                  <FeedbackComment
-                    key={c.id}
-                    comment={c}
-                    projectId={projectId}
-                    brandId={brandId}
-                    canResolve={canResolve}
-                    pin={lpPinNumber.get(c.id)}
-                    pinned={c.pin_x != null}
-                    pinHref={c.pin_x != null && c.resolved_at == null ? lpPinHref(c) : undefined}
-                  />
+                  <div key={c.id}>
+                    <FeedbackComment
+                      comment={c}
+                      projectId={projectId}
+                      brandId={brandId}
+                      canResolve={canResolve}
+                      pin={lpPinNumber.get(c.id)}
+                      pinned={c.pin_x != null}
+                      pinHref={c.pin_x != null && c.resolved_at == null ? lpPinHref(c) : undefined}
+                    />
+                    {rules && canResolve && (
+                      <SaveAsRule brandId={brandId} projectId={projectId} commentId={c.id} quote={c.content} rules={rules} defaultArea="landing_pages" />
+                    )}
+                  </div>
                 ))}
               </div>
             </div>
@@ -134,14 +144,18 @@ export default function ClientFeedbackPanel({
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 12 }}>
                         {comments.map(c => (
-                          <FeedbackComment
-                            key={c.id}
-                            comment={c}
-                            projectId={projectId}
-                            brandId={brandId}
-                            canResolve={canResolve}
-                            pin={c.pin_x != null ? ++pinN : undefined}
-                          />
+                          <div key={c.id}>
+                            <FeedbackComment
+                              comment={c}
+                              projectId={projectId}
+                              brandId={brandId}
+                              canResolve={canResolve}
+                              pin={c.pin_x != null ? ++pinN : undefined}
+                            />
+                            {rules && canResolve && (
+                              <SaveAsRule brandId={brandId} projectId={projectId} commentId={c.id} quote={c.content} rules={rules} defaultArea="ads" />
+                            )}
+                          </div>
                         ))}
                       </div>
                     </div>
