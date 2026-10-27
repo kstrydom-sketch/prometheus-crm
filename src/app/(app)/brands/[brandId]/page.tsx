@@ -7,7 +7,6 @@ import { updateBrandDetails, deleteBrand } from '@/lib/actions'
 import ConfirmDeleteForm from '@/components/ConfirmDeleteForm'
 import ProfitEngineerSelect from '@/components/ProfitEngineerSelect'
 import ClientPortalButton from '@/components/ClientPortalButton'
-import OnboardingTranscriptField from '@/components/OnboardingTranscriptField'
 import type { Brand, Project, PipelineStatus, BrandDna, BrandDocument, BrandComment } from '@/lib/types'
 import { PIPELINE_STATUS_LABELS, PIPELINE_STATUS_ORDER, profileName } from '@/lib/types'
 import ProjectCard from '@/components/ProjectCard'
@@ -20,6 +19,7 @@ import ClientRulesBoard from '@/components/brand/ClientRulesBoard'
 import ContactsCard from '@/components/brand/ContactsCard'
 import IntakeAnswers from '@/components/brand/IntakeAnswers'
 import { loadRules, type BrandContact } from '@/lib/brands/profile'
+import { saveBrandProfileFields } from '@/lib/brands/actions'
 import { formatDue, isOpen, jobStage, orderSteps, stageInfo, stepStatusStyle, type Job, type JobStep } from '@/lib/jobs/model'
 import '@/components/jobs/jobs.css'
 import '@/components/brand/brand.css'
@@ -35,7 +35,7 @@ export const maxDuration = 300
 // what they have told us, the work in flight, who to talk to, our notes and
 // their files. Account details open for editing behind "Edit details".
 
-type BrandJob = Pick<Job, 'id' | 'name' | 'kind' | 'status' | 'due_date' | 'due_label' | 'stages' | 'done_label'> & {
+type BrandJob = Pick<Job, 'id' | 'name' | 'kind' | 'status' | 'due_date' | 'due_label' | 'stages' | 'done_label' | 'project_id'> & {
   job_steps: Array<Pick<JobStep, 'id' | 'title' | 'status' | 'stage' | 'is_group' | 'due_date' | 'assignee_id' | 'sort_order' | 'parent_id'>>
 }
 
@@ -81,7 +81,7 @@ export default async function BrandPage({
     supabase.from('brand_comments').select('*').eq('brand_id', brandId).order('created_at', { ascending: false }),
     supabase
       .from('jobs')
-      .select('id, name, kind, status, due_date, due_label, stages, done_label, job_steps(id, title, status, stage, is_group, due_date, assignee_id, sort_order, parent_id)')
+      .select('id, name, kind, status, due_date, due_label, stages, done_label, project_id, job_steps(id, title, status, stage, is_group, due_date, assignee_id, sort_order, parent_id)')
       .eq('brand_id', brandId)
       .in('status', ['active', 'on_hold'])
       .order('due_date', { ascending: true }),
@@ -100,7 +100,10 @@ export default async function BrandPage({
   const jobs = (jobRows ?? []) as unknown as BrandJob[]
   const people = Object.fromEntries(profiles.map(p => [p.id, profileName(p)]))
 
-  const active = allProjects.filter(p => !p.is_complete)
+  // A production card a job already tracks would show the same moment twice,
+  // often with conflicting status, so only the job is listed.
+  const trackedByJob = new Set(jobs.map(j => j.project_id).filter(Boolean))
+  const active = allProjects.filter(p => !p.is_complete && !trackedByJob.has(p.id))
   const done = allProjects.filter(p => p.is_complete)
   const projectNames = Object.fromEntries(allProjects.map(p => [p.id, p.name]))
   const hasGuidelines = docsOf('guidelines').length > 0 || !!b.brand_guidelines
@@ -111,6 +114,11 @@ export default async function BrandPage({
 
   async function saveDetails(formData: FormData) {
     'use server'
+    const r = await saveBrandProfileFields(brandId, {
+      name: String(formData.get('name') ?? ''),
+      website: String(formData.get('website') ?? ''),
+    })
+    if (!r.ok) throw new Error(r.error)
     await updateBrandDetails(formData)
     redirect(`/brands/${brandId}`)
   }
@@ -134,14 +142,15 @@ export default async function BrandPage({
             <div className="mo-row" style={{ gap: 10 }}>
               <h1 className="mo-h1">{b.name}</h1>
               {clientNumStr && <span className="mo-pill" style={{ background: 'var(--surface-2)', color: 'var(--text-muted)' }}>{clientNumStr}</span>}
-              <BDStageBadge status={b.pipeline_status} />
-              <span className="mo-pill" style={{ color: billing.color, background: `color-mix(in srgb, ${billing.color} 14%, transparent)` }}>{billing.label}</span>
+              {/* One status. Before they sign, where they are in sales; after, whether they are paying. */}
+              {b.pipeline_status !== 'active'
+                ? <BDStageBadge status={b.pipeline_status} />
+                : <span className="mo-pill" style={{ color: billing.color, background: `color-mix(in srgb, ${billing.color} 14%, transparent)` }}>{b.is_trial ? 'On trial' : `${billing.label} client`}</span>}
             </div>
             <div className="bp-facts">
               {b.website && <a href={b.website} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)', textDecoration: 'none' }}>{b.website.replace(/^https?:\/\//, '').replace(/\/$/, '')} ↗</a>}
               {b.start_date && <span>Client since <b>{fmtDate(b.start_date)}</b></span>}
               {b.profit_engineer && <span>Profit engineer <b>{b.profit_engineer}</b></span>}
-              {isAuthorized && b.monthly_retainer != null && <span>Retainer <b>${Number(b.monthly_retainer).toLocaleString('en-US')}/mo</b></span>}
             </div>
           </div>
         </div>
@@ -152,7 +161,7 @@ export default async function BrandPage({
       </header>
 
       {editing && (
-        <AccountDetailsForm b={b} brandId={brandId} engineerNames={engineerNames} action={saveDetails} />
+        <AccountDetailsForm b={b} brandId={brandId} engineerNames={engineerNames} teamNames={profiles.filter(p => p.can_edit).map(profileName)} action={saveDetails} />
       )}
 
       <div className="bp-layout">
@@ -209,7 +218,7 @@ export default async function BrandPage({
                 )}
                 {active.length > 0 && (
                   <div style={{ padding: '14px 24px 20px', borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    <p className="bp-label">Production cards</p>
+                    <p className="bp-label">Production cards not yet in a job</p>
                     {active.map(p => (
                       <ProjectCard showMomentCode key={p.id} project={p} href={`/brands/${brandId}/projects/${p.id}`} />
                     ))}
@@ -251,6 +260,7 @@ export default async function BrandPage({
                   brandName={b.name}
                   comments={brandComments}
                   currentUserId={user?.id ?? null}
+                  embedded
                 />
               </div>
             </section>
@@ -266,7 +276,7 @@ export default async function BrandPage({
           {isAuthorized && (
             <section className="mo-panel" aria-label="Files">
               <div className="bp-card-head">
-                <h2 className="mo-h2">Files <span className="mo-count">· {documents.length}</span></h2>
+                <h2 className="mo-h2">Files</h2>
               </div>
               <div className="bp-card-body" style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
                 <div>
@@ -279,6 +289,7 @@ export default async function BrandPage({
                     guidelines={b.brand_guidelines ?? null}
                     documents={docsOf('guidelines')}
                     documentKind="guidelines"
+                    embedded
                   />
                 </div>
                 <div>
@@ -334,7 +345,8 @@ export default async function BrandPage({
                   <dt>Retainer</dt><dd>{b.monthly_retainer != null ? `$${Number(b.monthly_retainer).toLocaleString('en-US')}/mo` : '—'}</dd>
                   <dt>Start date</dt><dd>{b.start_date ? fmtDate(b.start_date) : '—'}</dd>
                   <dt>Profit engineer</dt><dd>{b.profit_engineer ?? '—'}</dd>
-                  <dt>BD stage</dt><dd>{PIPELINE_STATUS_LABELS[b.pipeline_status]}</dd>
+                  <dt>Client stage</dt><dd>{PIPELINE_STATUS_LABELS[b.pipeline_status]}</dd>
+                  <dt>Growth strategist</dt><dd>{b.growth_strategist ?? '—'}</dd>
                   <dt>Meta ad account</dt><dd>{b.meta_ad_account_id ?? '—'}</dd>
                   <dt>Account created</dt><dd>{fmtDate(b.created_at)}</dd>
                 </dl>
@@ -363,106 +375,72 @@ export default async function BrandPage({
 }
 
 function AccountDetailsForm({
-  b, brandId, engineerNames, action,
+  b, brandId, engineerNames, teamNames, action,
 }: {
   b: Brand
   brandId: string
   engineerNames: string[]
+  teamNames: string[]
   action: (formData: FormData) => Promise<void>
 }) {
   const currentStatus = b.is_trial ? 'trial' : b.is_active ? 'active' : 'inactive'
-  const statusOptions = [
-    { value: 'active', label: 'Active', color: 'var(--success)' },
-    { value: 'inactive', label: 'Inactive', color: 'var(--danger)' },
-    { value: 'trial', label: 'On Trial', color: 'var(--warning)' },
-  ]
-  const stageColors: Record<string, string> = {
-    intro_contact: 'var(--text-muted)',
-    discovery_call: '#60a5fa',
-    offer_prep: 'var(--warning)',
-    active: 'var(--success)',
-  }
   return (
     <section className="mo-panel mo-panel-pad" aria-label="Edit account details">
       <div className="mo-spread" style={{ marginBottom: 18 }}>
         <h2 className="mo-h2">Edit account details</h2>
         <Link href={`/brands/${brandId}`} className="bp-link bp-link-muted">Cancel</Link>
       </div>
-      <form action={action}>
+      {/* Contacts, channel, notes, intake and files edit in place on the page. */}
+      <form action={action} className="bp-form" style={{ gap: 18 }}>
         <input type="hidden" name="brand_id" value={brandId} />
-        {/* brand_notes is edited in Internal notes; carried through so this save does not clear it. */}
-        <input type="hidden" name="brand_notes" value={b.brand_notes ?? ''} />
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 20, marginBottom: 20 }}>
+        <div className="bp-grid">
           <div>
-            <label>Monthly Retainer ($)</label>
-            <input name="monthly_retainer" type="number" min="0" step="1" defaultValue={b.monthly_retainer ?? ''} placeholder="e.g. 5000" />
+            <label htmlFor="ad-name">Brand name</label>
+            <input id="ad-name" name="name" defaultValue={b.name} required />
           </div>
           <div>
-            <label>Start Date</label>
-            <input name="start_date" type="date" defaultValue={b.start_date ?? ''} />
+            <label htmlFor="ad-website">Website</label>
+            <input id="ad-website" name="website" defaultValue={b.website ?? ''} placeholder="brand.com" />
           </div>
           <div>
-            <label>Profit Engineer</label>
+            <label htmlFor="ad-stage">Client stage</label>
+            <select id="ad-stage" name="pipeline_status" defaultValue={b.pipeline_status}>
+              {PIPELINE_STATUS_ORDER.map(s => <option key={s} value={s}>{PIPELINE_STATUS_LABELS[s]}</option>)}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="ad-billing">Billing status</label>
+            <select id="ad-billing" name="client_status" defaultValue={currentStatus}>
+              <option value="active">Active</option>
+              <option value="trial">On trial</option>
+              <option value="inactive">Inactive</option>
+            </select>
+          </div>
+          <div>
+            <label htmlFor="ad-retainer">Monthly retainer ($)</label>
+            <input id="ad-retainer" name="monthly_retainer" type="number" min="0" step="1" defaultValue={b.monthly_retainer ?? ''} placeholder="e.g. 5000" />
+          </div>
+          <div>
+            <label htmlFor="ad-start">Start date</label>
+            <input id="ad-start" name="start_date" type="date" defaultValue={b.start_date ?? ''} />
+          </div>
+          <div>
+            <label>Profit engineer</label>
             <ProfitEngineerSelect engineers={engineerNames} current={b.profit_engineer} />
           </div>
           <div>
-            <label>Meta Ad Account ID</label>
-            <input name="meta_ad_account_id" defaultValue={b.meta_ad_account_id ?? ''} placeholder="act_1234567890" />
-            <span style={{ display: 'block', marginTop: 4, fontSize: 11, color: 'var(--text-muted)' }}>
-              Feeds the Results tab on this brand&apos;s projects.
-            </span>
+            <label htmlFor="ad-gs">Growth strategist</label>
+            <input id="ad-gs" name="growth_strategist" list="ad-gs-team" defaultValue={b.growth_strategist ?? ''} />
+            <datalist id="ad-gs-team">{teamNames.map(n => <option key={n} value={n} />)}</datalist>
+          </div>
+          <div>
+            <label htmlFor="ad-meta">Meta ad account ID</label>
+            <input id="ad-meta" name="meta_ad_account_id" defaultValue={b.meta_ad_account_id ?? ''} placeholder="act_1234567890" />
+            <span className="bp-hint">Feeds the Results tab on this brand&apos;s projects.</span>
           </div>
         </div>
-
-        <div style={{ marginBottom: 20 }}>
-          <label style={{ display: 'block', marginBottom: 8 }}>BD Pipeline Stage</label>
-          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-            {PIPELINE_STATUS_ORDER.map((status, i) => {
-              const isActive = b.pipeline_status === status
-              const color = stageColors[status]
-              return (
-                <label key={status} style={{
-                  display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer',
-                  padding: '6px 12px', borderRadius: 7, fontSize: 12, fontWeight: 500,
-                  border: `1px solid ${isActive ? color : 'var(--border)'}`,
-                  background: isActive ? `color-mix(in srgb, ${color} 15%, transparent)` : 'transparent',
-                  color: isActive ? color : 'var(--text-muted)',
-                  letterSpacing: 0, textTransform: 'none', marginBottom: 0,
-                }}>
-                  <input type="radio" name="pipeline_status" value={status} defaultChecked={isActive} style={{ width: 'auto', padding: 0 }} />
-                  {i + 1}. {PIPELINE_STATUS_LABELS[status]}
-                </label>
-              )
-            })}
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20, padding: '10px 16px', background: 'var(--surface-raised)', borderRadius: 8, border: '1px solid var(--border)', flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 13, color: 'var(--text-secondary)', flex: 1 }}>Billing status</span>
-          <div style={{ display: 'flex', gap: 4 }}>
-            {statusOptions.map(opt => (
-              <label key={opt.value} style={{
-                display: 'flex', alignItems: 'center', gap: 5,
-                cursor: 'pointer', textTransform: 'none', letterSpacing: 0,
-                fontSize: 12, fontWeight: 500, marginBottom: 0,
-                padding: '5px 10px', borderRadius: 6,
-                background: currentStatus === opt.value ? `color-mix(in srgb, ${opt.color} 15%, transparent)` : 'transparent',
-                border: `1px solid ${currentStatus === opt.value ? opt.color : 'transparent'}`,
-                color: currentStatus === opt.value ? opt.color : 'var(--text-muted)',
-              }}>
-                <input type="radio" name="client_status" value={opt.value} defaultChecked={currentStatus === opt.value} style={{ width: 'auto', padding: 0 }} />
-                {opt.label}
-              </label>
-            ))}
-          </div>
-        </div>
-
-        <div style={{ marginBottom: 20 }}>
-          <OnboardingTranscriptField initialValue={b.onboarding_transcript ?? null} />
-        </div>
-
         <div className="bp-actions">
-          <button type="submit" className="btn-primary" style={{ fontSize: 14 }}>Save account details</button>
+          <button type="submit" className="btn-primary" style={{ fontSize: 14 }}>Save</button>
           <Link href={`/brands/${brandId}`} className="bp-link bp-link-muted">Cancel</Link>
         </div>
       </form>

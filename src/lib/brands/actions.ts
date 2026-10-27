@@ -77,11 +77,20 @@ export async function deleteContact(brandId: string, id: string): Promise<Result
 /** The brand-level fields that are not part of Account details. */
 export async function saveBrandProfileFields(
   brandId: string,
-  values: { preferred_channel?: string | null; channel_details?: string | null; intake_answers?: string | null },
+  values: { name?: string; website?: string; preferred_channel?: string | null; channel_details?: string | null; intake_answers?: string | null },
 ): Promise<Result> {
   const auth = await editor()
   if (!auth.ok) return auth
   const patch: Record<string, string | null> = {}
+  if ('name' in values) {
+    const name = values.name?.trim()
+    if (!name) return { ok: false, error: 'The brand needs a name.' }
+    patch.name = name
+  }
+  if ('website' in values) {
+    const w = values.website?.trim() ?? ''
+    patch.website = w && !/^https?:\/\//i.test(w) ? `https://${w}` : w
+  }
   if ('preferred_channel' in values) {
     const c = values.preferred_channel ?? ''
     patch.preferred_channel = c in CHANNELS ? (c as Channel) : null

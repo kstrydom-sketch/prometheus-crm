@@ -179,10 +179,9 @@ function RuleItem({ rule: r, brandId, people, projects, canEdit }: {
       <div className="cr-line">
         <span className="cr-area">{RULE_AREAS[r.area].label}</span>
         <span className="cr-rule">{r.rule}</span>
-        {n > 0 && (
-          <span className={`cr-told ${n > 1 ? 'cr-told-again' : 'cr-told-once'}`} title={n > 1 ? 'They had to say this more than once' : undefined}>
-            Told us {n}×
-          </span>
+        {/* Only when they had to repeat it: "told us once" on every rule is noise. */}
+        {n > 1 && (
+          <span className="cr-told cr-told-again" title="They had to say this more than once">Told us {n}×</span>
         )}
       </div>
       {r.why && <p className="cr-why">Why: {r.why}</p>}

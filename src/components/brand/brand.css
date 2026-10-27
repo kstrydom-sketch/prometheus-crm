@@ -82,3 +82,5 @@
 .bp-work .bp-next { font-size: 13.5px; color: var(--text-muted); grid-column: 1 / -1; }
 .bp-tracks { display: flex; gap: 6px; flex-wrap: wrap; }
 .cr-count { font-size: 13px; color: var(--text-muted); font-weight: 500; }
+.bp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px 20px; }
+.bp-hint { display: block; margin-top: 4px; font-size: 12px; color: var(--text-muted); }

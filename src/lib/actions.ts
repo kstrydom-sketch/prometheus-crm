@@ -607,7 +607,12 @@ export async function updateBrandDetails(formData: FormData) {
     else throw new Error('Meta ad account ID must look like act_1234567890.')
   }
 
-  const core = { monthly_retainer, start_date, growth_strategist, is_active, is_trial, profit_engineer, pipeline_status, brand_notes }
+  // Only the fields this form actually carries. A form without a growth
+  // strategist (or notes) field must not save them as empty: that silently
+  // cleared both on every save.
+  const core: Record<string, unknown> = { monthly_retainer, start_date, is_active, is_trial, profit_engineer, pipeline_status }
+  if (formData.has('growth_strategist')) core.growth_strategist = growth_strategist
+  if (formData.has('brand_notes')) core.brand_notes = brand_notes
 
   // Try with onboarding_transcript + meta_ad_account_id. If either column
   // doesn't exist yet (migrations 20260701_add_onboarding_transcript.sql /
@@ -615,7 +620,7 @@ export async function updateBrandDetails(formData: FormData) {
   // them so the rest of the account details still persist.
   const { error } = await supabase
     .from('brands')
-    .update({ ...core, onboarding_transcript, meta_ad_account_id })
+    .update({ ...core, ...(formData.has('onboarding_transcript') ? { onboarding_transcript } : {}), meta_ad_account_id })
     .eq('id', brandId)
 
   if (error) {
