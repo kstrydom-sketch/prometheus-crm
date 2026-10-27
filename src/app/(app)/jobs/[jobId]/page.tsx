@@ -13,7 +13,16 @@ import CommentThreads from '@/components/jobs/CommentThreads'
 import {
   AddStepForm, DeleteStepButton, FollowButton, JobOwnerSelect, JobStatusSelect, RescheduleForm,
 } from '@/components/jobs/JobControls'
+import { ReviewSummary } from '@/components/jobs/ReviewRounds'
+import StepWork from '@/components/jobs/StepWork'
+import { loadCardWork } from '@/lib/jobs/card-work'
+import { isLinkedStep, stepDeliverable, type Deliverable } from '@/lib/jobs/review'
 import '@/components/jobs/jobs.css'
+
+/** A linked step's status: shown, not chosen. It moves with the review. */
+function LinkedStatus({ s }: { s: Pick<JobStep, 'status'> }) {
+  return <span className="mo-pill is-linked" title="Moves with the review" style={{ color: STEP_STATUS[s.status].fg, background: STEP_STATUS[s.status].bg }}>{STEP_STATUS[s.status].label}</span>
+}
 
 const when = (iso: string) =>
   new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(iso))
@@ -60,6 +69,13 @@ export default async function JobPage({
   const describe = (a: ActivityRow) => describeActivity(a, nameOf, stepTitle, job)
   const next = work.find(s => isOpen(s.status))
   const commentCount = (stepId: string) => comments.filter(c => c.step_id === stepId).length
+  // The offer and production cards behind the linked steps, and their rounds.
+  const cardWork = await loadCardWork(supabase, job)
+  const linked = (s: JobStep) => isLinkedStep(s, job)
+  const stepFor = (d: Deliverable) => {
+    const mine = work.filter(s => stepDeliverable(s.key) === d)
+    return (mine.find(s => isOpen(s.status)) ?? mine[mine.length - 1])?.id ?? null
+  }
 
   return (
     <div className="mo-page">
@@ -99,10 +115,12 @@ export default async function JobPage({
             <span className="mo-row" style={{ gap: 8 }}><span className="mo-muted">Start (day 0)</span><RescheduleForm jobId={job.id} startDate={job.start_date} /></span>
           )}
           <span className="mo-muted">{followers.length} following</span>
-          {job.offer_card_id && <Link href={`/offers/${job.offer_card_id}`} className="mo-crumb">Old offer card →</Link>}
-          {job.project_id && job.brands && <Link href={`/brands/${job.brands.id}/projects/${job.project_id}`} className="mo-crumb">Old production card →</Link>}
+          {job.offer_card_id && <Link href={`/offers/${job.offer_card_id}`} className="mo-crumb">Offer card →</Link>}
+          {job.project_id && job.brands && <Link href={`/brands/${job.brands.id}/projects/${job.project_id}`} className="mo-crumb">Production card →</Link>}
         </div>
       </header>
+
+      <ReviewSummary jobId={job.id} states={cardWork.states} rounds={cardWork.rounds} stepFor={stepFor} />
 
       <div className="mo-layout">
         <section className="mo-panel" aria-label="Steps">
@@ -135,7 +153,7 @@ export default async function JobPage({
                     </td>
                     <td><AssigneeSelect stepId={s.id} assigneeId={s.assignee_id} people={people} label={`Owner of ${s.title}`} /></td>
                     <td><DueInput key={s.due_date ?? 'none'} stepId={s.id} due={s.due_date} open={isOpen(s.status)} label={`Due date of ${s.title}`} /></td>
-                    <td><StatusSelect stepId={s.id} status={s.status} label={`Status of ${s.title}`} /></td>
+                    <td>{linked(s) ? <LinkedStatus s={s} /> : <StatusSelect stepId={s.id} status={s.status} label={`Status of ${s.title}`} />}</td>
                   </tr>
                 )
               })}
@@ -156,9 +174,15 @@ export default async function JobPage({
               <div className="mo-field">
                 <span>Owner</span><div><AssigneeSelect stepId={selected.id} assigneeId={selected.assignee_id} people={people} /></div>
                 <span>Due</span><div><DueInput key={selected.due_date ?? 'none'} stepId={selected.id} due={selected.due_date} open={isOpen(selected.status)} /></div>
-                <span>Status</span><div><StatusSelect stepId={selected.id} status={selected.status} /></div>
+                <span>Status</span><div>{linked(selected) ? <LinkedStatus s={selected} /> : <StatusSelect stepId={selected.id} status={selected.status} />}</div>
                 {selected.completed_at && <><span>Finished</span><div>{when(selected.completed_at)}</div></>}
               </div>
+              {linked(selected) && (
+                <>
+                  <hr style={{ border: 0, borderTop: '1px solid var(--border)', margin: 0 }} />
+                  <StepWork jobId={job.id} brandId={job.brands?.id ?? null} stepKey={selected.key} work={cardWork} />
+                </>
+              )}
               <hr style={{ border: 0, borderTop: '1px solid var(--border)', margin: 0 }} />
               <CommentThreads comments={comments.filter(c => c.step_id === selected.id)} people={people} jobId={job.id} stepId={selected.id} emptyText="No comments on this step yet." />
               <StepComposer jobId={job.id} stepId={selected.id} people={people} defaultMention={selected.assignee_id} />

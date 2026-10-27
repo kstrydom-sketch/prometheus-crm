@@ -109,3 +109,42 @@
 .tp-icon:disabled { opacity: 0.35; cursor: default; }
 .tp-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 20px; padding: 18px 24px; border-bottom: 1px solid var(--border); }
 .tp-card:last-child { border-bottom: none; }
+
+/* ── Review rounds ─────────────────────────────────────────────────────── */
+.rv-summary { display: flex; flex-direction: column; gap: 12px; }
+.rv-summary ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.rv-summary li { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 15px; }
+.rv-name { font-weight: 700; color: var(--text-primary); text-decoration: none; min-width: 120px; }
+a.rv-name:hover { text-decoration: underline; }
+.rv-chips { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.rv-chip { display: inline-flex; align-items: center; gap: 5px; border-radius: 8px; padding: 3px 9px; font-size: 13px; font-weight: 600; border: 1px solid var(--border); background: var(--surface-2); color: var(--text-secondary); white-space: nowrap; }
+.rv-chip.is-ok { color: #3F6212; background: rgba(101, 163, 13, 0.14); border-color: rgba(101, 163, 13, 0.35); }
+.rv-chip.is-changes { color: #BE123C; background: rgba(244, 63, 94, 0.10); border-color: rgba(244, 63, 94, 0.35); }
+.rv-chip.is-open { color: #92400E; background: rgba(245, 158, 11, 0.14); border-color: rgba(245, 158, 11, 0.4); }
+.rv-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.rv-ask { display: flex; flex-direction: column; gap: 8px; }
+.rv-ask label { font-size: 14px; font-weight: 600; }
+.rv-ask textarea { width: 100%; font-size: 14px; }
+.rv-timeline { list-style: none; margin: 8px 0 0; padding: 0 0 0 14px; border-left: 2px solid var(--border-strong); display: flex; flex-direction: column; gap: 14px; }
+.rv-timeline li { position: relative; display: flex; flex-direction: column; gap: 4px; }
+.rv-timeline li::before { content: ''; position: absolute; left: -20px; top: 6px; width: 10px; height: 10px; border-radius: 50%; background: var(--border-strong); }
+.rv-timeline li.is-ok::before { background: #65A30D; }
+.rv-timeline li.is-changes::before { background: #E11D48; }
+.rv-timeline li.is-open::before { background: #F59E0B; }
+.rv-tl-head { display: flex; align-items: center; gap: 10px; font-size: 14.5px; }
+.rv-tl-meta { font-size: 13px; color: var(--text-muted); }
+.rv-note p { margin: 2px 0; font-size: 14px; line-height: 1.5; white-space: pre-wrap; padding: 8px 10px; border-radius: 8px; background: var(--surface-2); }
+.mo-pill.is-linked { cursor: default; }
+
+/* ── The work behind a step ────────────────────────────────────────────── */
+.sw { display: flex; flex-direction: column; gap: 12px; }
+.sw-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.sw-kicker { font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); }
+.sw-fields { align-items: start; }
+.sw-value { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; }
+.sw-summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--text-secondary); }
+.sw-checks { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 14px; color: var(--text-secondary); }
+.sw-checks li.is-ok { color: var(--text-primary); }
+.sw-checks li.is-ok span { color: #65A30D; font-weight: 700; }
+.sw-warn { margin: 0; font-size: 14px; line-height: 1.5; padding: 10px 12px; border-radius: 10px; color: #9F1239; background: rgba(244, 63, 94, 0.08); border: 1px solid rgba(244, 63, 94, 0.25); white-space: pre-wrap; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }

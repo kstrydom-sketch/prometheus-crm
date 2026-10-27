@@ -5,7 +5,7 @@
 // workflow template (Moments, Client onboarding, ...), which they copy at
 // creation; a one-off task is a job with a single step and no template.
 
-export type StepStatus = 'todo' | 'in_progress' | 'waiting_client' | 'blocked' | 'done' | 'skipped'
+export type StepStatus = 'todo' | 'in_progress' | 'waiting_client' | 'changes_requested' | 'blocked' | 'done' | 'skipped'
 export type JobStatus = 'active' | 'done' | 'on_hold' | 'cancelled'
 export type JobKind = 'workflow' | 'task'
 export type CommentKind = 'note' | 'fyi' | 'needs_action'
@@ -115,7 +115,7 @@ export interface InboxItem {
   step_id: string | null
   comment_id: string | null
   kind: 'needs_action' | 'fyi'
-  reason: 'assigned' | 'mentioned' | 'following' | 'comment_on_my_step' | 'reply'
+  reason: 'assigned' | 'mentioned' | 'following' | 'comment_on_my_step' | 'reply' | 'review'
   actor_id: string | null
   title: string
   body: string | null
@@ -127,11 +127,12 @@ export const STEP_STATUS: Record<StepStatus, { label: string; fg: string; bg: st
   todo:           { label: 'To do',            fg: '#5C5346', bg: 'rgba(92, 83, 70, 0.10)' },
   in_progress:    { label: 'In progress',      fg: '#1D4ED8', bg: 'rgba(59, 130, 246, 0.14)' },
   waiting_client: { label: 'Waiting on client', fg: '#92400E', bg: 'rgba(245, 158, 11, 0.18)' },
+  changes_requested: { label: 'Changes requested', fg: '#BE123C', bg: 'rgba(244, 63, 94, 0.14)' },
   blocked:        { label: 'Blocked',          fg: '#B91C1C', bg: 'rgba(239, 68, 68, 0.14)' },
   done:           { label: 'Done',             fg: '#3F6212', bg: 'rgba(101, 163, 13, 0.18)' },
   skipped:        { label: 'Skipped',          fg: '#736856', bg: 'rgba(115, 104, 86, 0.10)' },
 }
-export const STEP_STATUS_ORDER: StepStatus[] = ['todo', 'in_progress', 'waiting_client', 'blocked', 'done', 'skipped']
+export const STEP_STATUS_ORDER: StepStatus[] = ['todo', 'in_progress', 'waiting_client', 'changes_requested', 'blocked', 'done', 'skipped']
 
 export const JOB_STATUS_ORDER: JobStatus[] = ['active', 'on_hold', 'done', 'cancelled']
 /** Job status label; 'done' reads as the template's own word ("Launched"). */
@@ -206,6 +207,7 @@ export function groupStatus(children: Pick<JobStep, 'status'>[]): StepStatus {
   if (!children.length) return 'todo'
   if (children.every(c => !isOpen(c.status))) return 'done'
   if (children.some(c => c.status === 'blocked')) return 'blocked'
+  if (children.some(c => c.status === 'changes_requested')) return 'changes_requested'
   if (children.some(c => c.status === 'waiting_client')) return 'waiting_client'
   if (children.some(c => c.status !== 'todo')) return 'in_progress'
   return 'todo'
