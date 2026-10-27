@@ -131,6 +131,12 @@ export const STEP_STATUS: Record<StepStatus, { label: string; fg: string; bg: st
   done:           { label: 'Done',             fg: '#3F6212', bg: 'rgba(101, 163, 13, 0.18)' },
   skipped:        { label: 'Skipped',          fg: '#736856', bg: 'rgba(115, 104, 86, 0.10)' },
 }
+/** Style for any stored status. A status this code doesn't know yet (another
+ *  branch can add one to the shared database) shows as its own words in the
+ *  neutral colour instead of breaking the page. */
+export function stepStatusStyle(status: string): { label: string; fg: string; bg: string } {
+  return STEP_STATUS[status as StepStatus] ?? { ...STEP_STATUS.todo, label: status.replace(/_/g, ' ').replace(/^./, c => c.toUpperCase()) }
+}
 export const STEP_STATUS_ORDER: StepStatus[] = ['todo', 'in_progress', 'waiting_client', 'blocked', 'done', 'skipped']
 
 export const JOB_STATUS_ORDER: JobStatus[] = ['active', 'on_hold', 'done', 'cancelled']

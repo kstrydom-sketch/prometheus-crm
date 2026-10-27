@@ -4,7 +4,7 @@ import { createClient, getCachedUser } from '@/lib/supabase/server'
 import { getCachedProfiles } from '@/lib/profiles'
 import { profileName } from '@/lib/types'
 import {
-  describeActivity, formatDue, groupStatus, isOpen, isOverdue, jobStage, orderSteps, stageInfo, STEP_STATUS, todayIso,
+  describeActivity, formatDue, groupStatus, isOpen, isOverdue, jobStage, orderSteps, stageInfo, STEP_STATUS, stepStatusStyle, todayIso,
   type ActivityRow, type Job, type JobStep, type StepComment,
 } from '@/lib/jobs/model'
 import { AssigneeSelect, DueInput, StatusSelect, type Person } from '@/components/jobs/StepControls'
@@ -82,7 +82,7 @@ export default async function JobPage({
                 <span className="mo-muted">Next: </span>
                 <Link href={`/jobs/${job.id}?step=${next.id}`} scroll={false} className="mo-step-title">{next.title}</Link>
                 <span className="mo-muted"> · {nameOf(next.assignee_id)} · {formatDue(next.due_date)} · </span>
-                <span style={{ color: STEP_STATUS[next.status].fg, fontWeight: 600 }}>{STEP_STATUS[next.status].label}</span>
+                <span style={{ color: stepStatusStyle(next.status).fg, fontWeight: 600 }}>{stepStatusStyle(next.status).label}</span>
               </p>
             )}
             <p className="mo-sub">

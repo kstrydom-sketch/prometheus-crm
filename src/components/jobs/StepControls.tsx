@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { updateStep } from '@/lib/jobs/actions'
-import { STEP_STATUS, STEP_STATUS_ORDER, todayIso, type StepStatus } from '@/lib/jobs/model'
+import { STEP_STATUS, STEP_STATUS_ORDER, stepStatusStyle, todayIso, type StepStatus } from '@/lib/jobs/model'
 import './jobs.css'
 
 export type Person = { id: string; name: string }
@@ -22,7 +22,7 @@ function useSave(stepId: string) {
 
 export function StatusSelect({ stepId, status, label = 'Status' }: { stepId: string; status: StepStatus; label?: string }) {
   const { pending, error, save } = useSave(stepId)
-  const s = STEP_STATUS[status]
+  const s = stepStatusStyle(status)
   return (
     <>
       <select
@@ -33,6 +33,7 @@ export function StatusSelect({ stepId, status, label = 'Status' }: { stepId: str
         onChange={e => save({ status: e.target.value as StepStatus })}
         style={{ color: s.fg, background: s.bg, opacity: pending ? 0.6 : 1 }}
       >
+        {!STEP_STATUS_ORDER.includes(status) && <option value={status}>{s.label}</option>}
         {STEP_STATUS_ORDER.map(k => <option key={k} value={k}>{STEP_STATUS[k].label}</option>)}
       </select>
       {error && <span className="mo-error" role="alert"> {error}</span>}

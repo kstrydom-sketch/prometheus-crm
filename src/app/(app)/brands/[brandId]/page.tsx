@@ -20,7 +20,7 @@ import ClientRulesBoard from '@/components/brand/ClientRulesBoard'
 import ContactsCard from '@/components/brand/ContactsCard'
 import IntakeAnswers from '@/components/brand/IntakeAnswers'
 import { loadRules, type BrandContact } from '@/lib/brands/profile'
-import { formatDue, isOpen, jobStage, orderSteps, stageInfo, STEP_STATUS, type Job, type JobStep } from '@/lib/jobs/model'
+import { formatDue, isOpen, jobStage, orderSteps, stageInfo, stepStatusStyle, type Job, type JobStep } from '@/lib/jobs/model'
 import '@/components/jobs/jobs.css'
 import '@/components/brand/brand.css'
 
@@ -199,7 +199,7 @@ export default async function BrandPage({
                               Next: <b style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{next.title}</b>
                               {' · '}{next.assignee_id ? people[next.assignee_id] ?? 'Someone' : 'Unassigned'}
                               {' · '}{formatDue(next.due_date)}{' · '}
-                              <span style={{ color: STEP_STATUS[next.status].fg, fontWeight: 600 }}>{STEP_STATUS[next.status].label}</span>
+                              <span style={{ color: stepStatusStyle(next.status).fg, fontWeight: 600 }}>{stepStatusStyle(next.status).label}</span>
                             </span>
                           )}
                         </li>

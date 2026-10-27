@@ -5,7 +5,7 @@ import { getCachedProfiles } from '@/lib/profiles'
 import { profileName } from '@/lib/types'
 import { canEditTemplates } from '@/lib/permissions'
 import {
-  DONE_STAGE, formatDue, isOpen, isOverdue, jobStage, orderSteps, stageInfo, STEP_STATUS, todayIso,
+  DONE_STAGE, formatDue, isOpen, isOverdue, jobStage, orderSteps, stageInfo, stepStatusStyle, todayIso,
   type Job, type JobStep, type WorkflowTemplate,
 } from '@/lib/jobs/model'
 import { NewWorkButtons } from '@/components/jobs/JobControls'
@@ -165,14 +165,14 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
                     {info && <span className="mo-pill" style={{ fontSize: 14, color: info.fg, background: info.bg }}>{info.label}</span>}
                     {j.kind === 'task' ? (
                       next
-                        ? <span style={{ color: STEP_STATUS[next.status].fg, fontWeight: 600, fontSize: 13 }}>{STEP_STATUS[next.status].label}</span>
+                        ? <span style={{ color: stepStatusStyle(next.status).fg, fontWeight: 600, fontSize: 13 }}>{stepStatusStyle(next.status).label}</span>
                         : <span className="mo-muted" style={{ fontSize: 13 }}>Done</span>
                     ) : next ? (
                       <span style={{ fontSize: 13 }}>
                         <span className="mo-muted">Next: </span>
                         <Link href={`/jobs/${j.id}?step=${next.id}`}>{next.title}</Link>
                         <span className="mo-muted"> · {nameOf(next.assignee_id)} · {formatDue(next.due_date)} · </span>
-                        <span style={{ color: STEP_STATUS[next.status].fg, fontWeight: 600 }}>{STEP_STATUS[next.status].label}</span>
+                        <span style={{ color: stepStatusStyle(next.status).fg, fontWeight: 600 }}>{stepStatusStyle(next.status).label}</span>
                       </span>
                     ) : <span className="mo-muted" style={{ fontSize: 13 }}>All steps done</span>}
                   </div>
