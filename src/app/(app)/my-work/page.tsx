@@ -2,12 +2,12 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createClient, getCachedUser } from '@/lib/supabase/server'
 import { getCachedProfiles } from '@/lib/profiles'
-import { daysBetween, formatDue, todayIso, type InboxItem, type MomentStep } from '@/lib/moments/model'
-import { StatusSelect } from '@/components/moments/StepControls'
-import { ClearAllFyiButton, ClearButton } from '@/components/moments/MomentControls'
-import '@/components/moments/moments.css'
+import { daysBetween, formatDue, todayIso, type InboxItem, type JobStep } from '@/lib/jobs/model'
+import { StatusSelect } from '@/components/jobs/StepControls'
+import { ClearAllFyiButton, ClearButton } from '@/components/jobs/JobControls'
+import '@/components/jobs/jobs.css'
 
-type MyStep = MomentStep & { moments: { id: string; name: string; status: string } | null }
+type MyStep = JobStep & { jobs: { id: string; name: string; status: string; kind: string; brands: { name: string } | null } | null }
 
 export default async function MyWorkPage() {
   const user = await getCachedUser()
@@ -19,12 +19,12 @@ export default async function MyWorkPage() {
   const nameOf = (id: string | null) => profiles.find(p => p.id === id)?.full_name ?? 'Someone'
 
   const [{ data: stepsRaw }, { data: inboxRaw }] = await Promise.all([
-    supabase.from('moment_steps').select('*, moments(id, name, status)')
+    supabase.from('job_steps').select('*, jobs(id, name, status, kind, brands(name))')
       .eq('assignee_id', me.id).eq('is_group', false).not('status', 'in', '(done,skipped)')
       .order('due_date', { ascending: true, nullsFirst: false }),
     supabase.from('inbox_items').select('*').eq('recipient_id', me.id).is('cleared_at', null).order('created_at', { ascending: false }),
   ])
-  const steps = ((stepsRaw ?? []) as MyStep[]).filter(s => s.moments?.status === 'active' || s.moments?.status === 'on_hold')
+  const steps = ((stepsRaw ?? []) as MyStep[]).filter(s => s.jobs?.status === 'active' || s.jobs?.status === 'on_hold')
   const inbox = (inboxRaw ?? []) as InboxItem[]
   const today = todayIso()
 
@@ -37,7 +37,7 @@ export default async function MyWorkPage() {
   ]
   const actions = inbox.filter(i => i.kind === 'needs_action')
   const fyis = inbox.filter(i => i.kind === 'fyi')
-  const link = (i: InboxItem) => (i.moment_id ? `/moments/${i.moment_id}${i.step_id ? `?step=${i.step_id}` : ''}` : '/moments')
+  const link = (i: InboxItem) => (i.job_id ? `/jobs/${i.job_id}${i.step_id ? `?step=${i.step_id}` : ''}` : '/jobs')
   const ago = (iso: string) => {
     const d = daysBetween(iso.slice(0, 10), today)
     return d <= 0 ? 'today' : d === 1 ? 'yesterday' : `${d} days ago`
@@ -65,8 +65,8 @@ export default async function MyWorkPage() {
                   {b.items.map(s => (
                     <li key={s.id} style={{ gridTemplateColumns: 'minmax(0, 1fr) auto auto' }}>
                       <div>
-                        <Link href={`/moments/${s.moment_id}?step=${s.id}`} style={{ fontWeight: 600 }}>{s.title}</Link>
-                        <div className="mo-muted" style={{ fontSize: 14 }}>{s.moments?.name}</div>
+                        <Link href={`/jobs/${s.job_id}?step=${s.id}`} style={{ fontWeight: 600 }}>{s.title}</Link>
+                        <div className="mo-muted" style={{ fontSize: 14 }}>{s.jobs?.kind === 'task' ? `Task · ${s.jobs.brands?.name ?? 'Internal'}` : s.jobs?.name}</div>
                       </div>
                       <span style={{ fontSize: 14, fontWeight: b.key === 'late' ? 700 : 500, color: b.key === 'late' ? '#B91C1C' : 'var(--text-secondary)' }}>
                         {formatDue(s.due_date)}{b.key === 'late' && s.due_date ? ` · ${daysBetween(s.due_date, today)}d late` : ''}

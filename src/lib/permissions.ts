@@ -53,3 +53,9 @@ export function isOfferAssignee(email: string | undefined | null): boolean {
 export function canViewMomentCodes(email: string | undefined | null): boolean {
   return isManagement(email)
 }
+
+/** Workflow templates (/jobs/templates) decide the steps every new job gets,
+ *  so only management changes them; everyone else can read them. */
+export function canEditTemplates(email: string | undefined | null): boolean {
+  return isManagement(email)
+}

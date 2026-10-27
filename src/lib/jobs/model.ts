@@ -1,30 +1,71 @@
-// Moments & steps: shared types, the step template, and working-day math.
-// Safe for both server and browser — no server-only imports here.
+// Jobs, workflow templates & steps: shared types, stage logic and working-day
+// math. Safe for both server and browser — no server-only imports here.
+//
+// A job is any piece of client or internal work. Most jobs are made from a
+// workflow template (Moments, Client onboarding, ...), which they copy at
+// creation; a one-off task is a job with a single step and no template.
 
 export type StepStatus = 'todo' | 'in_progress' | 'waiting_client' | 'blocked' | 'done' | 'skipped'
-export type MomentStatus = 'active' | 'launched' | 'on_hold' | 'cancelled'
+export type JobStatus = 'active' | 'done' | 'on_hold' | 'cancelled'
+export type JobKind = 'workflow' | 'task'
 export type CommentKind = 'note' | 'fyi' | 'needs_action'
 
-export interface Moment {
+export interface TemplateStage {
+  key: string
+  label: string
+}
+
+export interface TemplateStep {
+  key: string
+  title: string
+  /** Working days from the job's start (day 0). */
+  day: number
+  /** Steps sharing a group label are shown together under it. */
+  group: string | null
+  /** Key of the stage this step counts towards. */
+  stage: string | null
+}
+
+export interface WorkflowTemplate {
   id: string
-  brand_id: string
   name: string
-  target_month: string
-  slot: number
+  description: string | null
+  uses_month_slot: boolean
+  done_label: string
+  due_label: string
+  stages: TemplateStage[]
+  steps: TemplateStep[]
+  sort_order: number
+  archived_at: string | null
+  updated_by: string | null
+  updated_at: string
+}
+
+export interface Job {
+  id: string
+  kind: JobKind
+  template_id: string | null
+  brand_id: string | null
+  name: string
+  target_month: string | null
+  slot: number | null
   start_date: string
-  launch_date: string | null
-  status: MomentStatus
+  due_date: string | null
+  status: JobStatus
   owner_id: string | null
   offer_card_id: string | null
   project_id: string | null
+  stages: TemplateStage[]
+  done_label: string
+  due_label: string
   created_by: string | null
   created_at: string
   updated_at: string
 }
 
-export interface MomentStep {
+export interface JobStep {
   id: string
-  moment_id: string
+  job_id: string
   parent_id: string | null
   key: string | null
   title: string
@@ -33,6 +74,8 @@ export interface MomentStep {
   assignee_id: string | null
   due_date: string | null
   status: StepStatus
+  stage: string | null
+  day_offset: number | null
   started_at: string | null
   completed_at: string | null
   created_at: string
@@ -41,7 +84,7 @@ export interface MomentStep {
 
 export interface StepComment {
   id: string
-  moment_id: string
+  job_id: string
   step_id: string | null
   author_id: string | null
   body: string
@@ -54,9 +97,9 @@ export interface StepComment {
 
 export interface ActivityRow {
   id: number
-  moment_id: string | null
+  job_id: string | null
   step_id: string | null
-  entity: 'moment' | 'step' | 'comment'
+  entity: 'job' | 'step' | 'comment'
   action: 'created' | 'updated' | 'deleted' | 'commented'
   field: string | null
   old_value: string | null
@@ -68,7 +111,7 @@ export interface ActivityRow {
 export interface InboxItem {
   id: string
   recipient_id: string
-  moment_id: string | null
+  job_id: string | null
   step_id: string | null
   comment_id: string | null
   kind: 'needs_action' | 'fyi'
@@ -90,39 +133,31 @@ export const STEP_STATUS: Record<StepStatus, { label: string; fg: string; bg: st
 }
 export const STEP_STATUS_ORDER: StepStatus[] = ['todo', 'in_progress', 'waiting_client', 'blocked', 'done', 'skipped']
 
+export const JOB_STATUS_ORDER: JobStatus[] = ['active', 'on_hold', 'done', 'cancelled']
+/** Job status label; 'done' reads as the template's own word ("Launched"). */
+export function jobStatusLabel(status: JobStatus, doneLabel = 'Done'): string {
+  return { active: 'Active', on_hold: 'On hold', done: doneLabel, cancelled: 'Cancelled' }[status]
+}
+
 export const COMMENT_KIND: Record<CommentKind, { label: string; hint: string }> = {
   note:         { label: 'Note',         hint: 'Discussion. Nobody is notified except people you @mention.' },
   fyi:          { label: 'FYI',          hint: 'Lands in people’s inbox to read and clear.' },
   needs_action: { label: 'Needs action', hint: 'Stays in their inbox until they do it and clear it.' },
 }
 
-// The cycle, in working days from the moment's start date (day 0):
-//   1 offer written and reviewed · 4 client approves offer · 4 brief ready ·
-//   7 LP and creatives built · 8 through internal review · 10 with the client ·
-//   13 client edits done · 15 live.
-export interface TemplateStep {
-  key: string
-  title: string
-  day: number
-  group?: 'lp' | 'creative'
+/** The job's end date: the last step's day in the template. */
+export function templateLength(steps: Pick<TemplateStep, 'day'>[]): number {
+  return steps.reduce((max, s) => Math.max(max, s.day), 0)
 }
-export const TEMPLATE_GROUPS: Record<'lp' | 'creative', string> = { lp: 'Landing page', creative: 'Creatives' }
-export const STEP_TEMPLATE: TemplateStep[] = [
-  { key: 'offer_draft',            title: 'Write the offer',              day: 1 },
-  { key: 'offer_internal_review',  title: 'Offer internal review',        day: 1 },
-  { key: 'offer_client_approval',  title: 'Client approves the offer',    day: 4 },
-  { key: 'brief',                  title: 'Compile the brief',            day: 4 },
-  { key: 'lp_build',               title: 'Build the landing page',       day: 7,  group: 'lp' },
-  { key: 'lp_internal_review',     title: 'Internal review',              day: 8,  group: 'lp' },
-  { key: 'lp_client_review',       title: 'Client review',                day: 10, group: 'lp' },
-  { key: 'lp_client_edits',        title: 'Apply client edits',           day: 13, group: 'lp' },
-  { key: 'cr_drafts',              title: 'First drafts',                 day: 7,  group: 'creative' },
-  { key: 'cr_internal_review',     title: 'Internal review',              day: 8,  group: 'creative' },
-  { key: 'cr_client_review',       title: 'Client review',                day: 10, group: 'creative' },
-  { key: 'cr_client_edits',        title: 'Apply client edits',           day: 13, group: 'creative' },
-  { key: 'launch',                 title: 'Launch',                       day: 15 },
-]
-export const LAUNCH_DAY = 15
+
+/** Short, stable-enough key for a new stage or step in a template. */
+export function newKey(label: string, taken: Iterable<string>): string {
+  const base = label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 24) || 'item'
+  const used = new Set(taken)
+  let key = base
+  for (let i = 2; used.has(key); i++) key = `${base}_${i}`
+  return key
+}
 
 // ── dates ──────────────────────────────────────────────────────────────────
 // Dates are 'YYYY-MM-DD' strings handled in UTC so they never shift a day.
@@ -162,12 +197,12 @@ export function isOpen(s: StepStatus): boolean {
 }
 
 /** Overdue = still open and the due date is before today. */
-export function isOverdue(step: Pick<MomentStep, 'status' | 'due_date' | 'is_group'>, today = todayIso()): boolean {
+export function isOverdue(step: Pick<JobStep, 'status' | 'due_date' | 'is_group'>, today = todayIso()): boolean {
   return !step.is_group && isOpen(step.status) && !!step.due_date && step.due_date < today
 }
 
 /** A group's shown status, worked out from its children. */
-export function groupStatus(children: Pick<MomentStep, 'status'>[]): StepStatus {
+export function groupStatus(children: Pick<JobStep, 'status'>[]): StepStatus {
   if (!children.length) return 'todo'
   if (children.every(c => !isOpen(c.status))) return 'done'
   if (children.some(c => c.status === 'blocked')) return 'blocked'
@@ -177,32 +212,41 @@ export function groupStatus(children: Pick<MomentStep, 'status'>[]): StepStatus 
 }
 
 // ── stage ──────────────────────────────────────────────────────────────────
-// A moment's stage is the earliest phase that still has open work, so it shows
-// where the moment is actually held up, even when later steps started early.
-export type MomentStage = 'offer' | 'offer_approval' | 'brief' | 'production' | 'client_review' | 'client_edits' | 'launch' | 'launched'
+// A job's stage is the earliest of its stages that still has open work, so it
+// shows where the job is actually held up, even when later steps started
+// early. Stages come from the job's own copy of its template.
+export const DONE_STAGE = '__done'
+const STAGE_COLORS = [
+  { fg: '#475569', bg: 'rgba(148, 163, 184, 0.22)' },
+  { fg: '#92400E', bg: 'rgba(245, 158, 11, 0.18)' },
+  { fg: '#4338CA', bg: 'rgba(99, 102, 241, 0.14)' },
+  { fg: '#1D4ED8', bg: 'rgba(59, 130, 246, 0.14)' },
+  { fg: '#9D174D', bg: 'rgba(236, 72, 153, 0.13)' },
+  { fg: '#BE123C', bg: 'rgba(244, 63, 94, 0.14)' },
+  { fg: '#0E7490', bg: 'rgba(6, 182, 212, 0.16)' },
+  { fg: '#6D28D9', bg: 'rgba(139, 92, 246, 0.14)' },
+]
+const DONE_COLOR = { fg: '#3F6212', bg: 'rgba(101, 163, 13, 0.18)' }
 
-export const MOMENT_STAGE: Record<MomentStage, { label: string; fg: string; bg: string; keys: string[] }> = {
-  offer:          { label: 'Offer',            fg: '#475569', bg: 'rgba(148, 163, 184, 0.22)', keys: ['offer_draft', 'offer_internal_review'] },
-  offer_approval: { label: 'Offer approval',   fg: '#92400E', bg: 'rgba(245, 158, 11, 0.18)',  keys: ['offer_client_approval'] },
-  brief:          { label: 'Brief',            fg: '#4338CA', bg: 'rgba(99, 102, 241, 0.14)',  keys: ['brief'] },
-  production:     { label: 'In production',    fg: '#1D4ED8', bg: 'rgba(59, 130, 246, 0.14)',  keys: ['lp_build', 'lp_internal_review', 'cr_drafts', 'cr_internal_review'] },
-  client_review:  { label: 'Client review',    fg: '#92400E', bg: 'rgba(245, 158, 11, 0.18)',  keys: ['lp_client_review', 'cr_client_review'] },
-  client_edits:   { label: 'Client edits',     fg: '#BE123C', bg: 'rgba(244, 63, 94, 0.14)',   keys: ['lp_client_edits', 'cr_client_edits'] },
-  launch:         { label: 'Ready to launch',  fg: '#0E7490', bg: 'rgba(6, 182, 212, 0.16)',   keys: ['launch'] },
-  launched:       { label: 'Launched',         fg: '#3F6212', bg: 'rgba(101, 163, 13, 0.18)',  keys: [] },
+export interface StageInfo { key: string; label: string; fg: string; bg: string }
+
+export function stageInfo(stages: TemplateStage[], key: string, doneLabel: string): StageInfo {
+  if (key === DONE_STAGE) return { key, label: doneLabel, ...DONE_COLOR }
+  const i = stages.findIndex(s => s.key === key)
+  return { key, label: stages[i]?.label ?? key, ...STAGE_COLORS[Math.max(i, 0) % STAGE_COLORS.length] }
 }
-const STAGE_SEQUENCE: MomentStage[] = ['offer', 'offer_approval', 'brief', 'production', 'client_review', 'client_edits', 'launch']
 
-export function momentStage(steps: Pick<MomentStep, 'key' | 'status' | 'is_group'>[]): MomentStage {
-  for (const stage of STAGE_SEQUENCE) {
-    const keys = MOMENT_STAGE[stage].keys
-    if (steps.some(s => !s.is_group && s.key && keys.includes(s.key) && isOpen(s.status))) return stage
+/** Stage key the job is in, or DONE_STAGE. Null for jobs with no stages (tasks). */
+export function jobStage(stages: TemplateStage[], steps: Pick<JobStep, 'stage' | 'status' | 'is_group'>[]): string | null {
+  if (!stages.length) return null
+  for (const st of stages) {
+    if (steps.some(s => !s.is_group && s.stage === st.key && isOpen(s.status))) return st.key
   }
-  return 'launched'
+  return DONE_STAGE
 }
 
 /** Steps in display order: top-level by sort_order, each group followed by its children. */
-export function orderSteps<T extends Pick<MomentStep, 'id' | 'parent_id' | 'sort_order'>>(steps: T[]): Array<T & { depth: number }> {
+export function orderSteps<T extends Pick<JobStep, 'id' | 'parent_id' | 'sort_order'>>(steps: T[]): Array<T & { depth: number }> {
   const byParent = new Map<string | null, T[]>()
   for (const s of steps) {
     const list = byParent.get(s.parent_id) ?? []
@@ -222,22 +266,33 @@ export function orderSteps<T extends Pick<MomentStep, 'id' | 'parent_id' | 'sort
 }
 
 /** Plain-language line for one audit-log row. */
-export function describeActivity(row: ActivityRow, name: (id: string | null) => string, stepTitle: (id: string | null) => string): string {
+export function describeActivity(
+  row: ActivityRow,
+  name: (id: string | null) => string,
+  stepTitle: (id: string | null) => string,
+  job?: Pick<Job, 'done_label' | 'due_label' | 'stages'>,
+): string {
   const who = row.actor_id ? name(row.actor_id) : 'System'
-  const what = row.entity === 'moment' ? 'the moment' : row.entity === 'step' ? `“${stepTitle(row.step_id)}”` : 'a comment'
+  const what = row.entity === 'job' ? 'the job' : row.entity === 'step' ? `“${stepTitle(row.step_id)}”` : 'a comment'
   if (row.action === 'created') return row.entity === 'step' ? `${who} added step “${row.new_value}”` : `${who} created ${what}`
   if (row.action === 'deleted') return `${who} removed ${row.entity === 'step' ? `step “${row.old_value}”` : 'a comment'}`
   if (row.action === 'commented') return `${who} commented${row.step_id ? ` on “${stepTitle(row.step_id)}”` : ''}`
   const field = row.field ?? ''
   if (field === 'status') {
-    const to = STEP_STATUS[row.new_value as StepStatus]?.label ?? row.new_value
+    const to = row.entity === 'job'
+      ? jobStatusLabel(row.new_value as JobStatus, job?.done_label)
+      : STEP_STATUS[row.new_value as StepStatus]?.label ?? row.new_value
     return `${who} set ${what} to ${to}`
   }
   if (field === 'assignee_id' || field === 'owner_id') {
     return row.new_value ? `${who} assigned ${what} to ${name(row.new_value)}` : `${who} unassigned ${what}`
   }
-  if (field === 'due_date' || field === 'launch_date') {
-    return `${who} moved ${what} ${field === 'launch_date' ? 'launch ' : ''}from ${formatDue(row.old_value)} to ${formatDue(row.new_value)}`
+  if (field === 'due_date') {
+    const label = row.entity === 'job' ? `${(job?.due_label ?? 'due').toLowerCase()} date` : ''
+    return `${who} moved ${what}${label ? ` ${label}` : ''} from ${formatDue(row.old_value)} to ${formatDue(row.new_value)}`
+  }
+  if (field === 'stage' && job) {
+    return `${who} moved ${what} to the ${row.new_value ? stageInfo(job.stages, row.new_value, job.done_label).label : 'no'} stage`
   }
   if (field === 'title' || field === 'name') return `${who} renamed ${what} to “${row.new_value}”`
   return `${who} changed ${field.replace(/_/g, ' ')} on ${what}`

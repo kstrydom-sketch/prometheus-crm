@@ -1,9 +1,9 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { updateStep } from '@/lib/moments/actions'
-import { STEP_STATUS, STEP_STATUS_ORDER, todayIso, type StepStatus } from '@/lib/moments/model'
-import './moments.css'
+import { updateStep } from '@/lib/jobs/actions'
+import { STEP_STATUS, STEP_STATUS_ORDER, todayIso, type StepStatus } from '@/lib/jobs/model'
+import './jobs.css'
 
 export type Person = { id: string; name: string }
 

@@ -1,16 +1,16 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { addComment } from '@/lib/moments/actions'
-import { COMMENT_KIND, type CommentKind } from '@/lib/moments/model'
+import { addComment } from '@/lib/jobs/actions'
+import { COMMENT_KIND, type CommentKind } from '@/lib/jobs/model'
 import type { Person } from './StepControls'
-import './moments.css'
+import './jobs.css'
 
 // Internal comment box. The kind decides who gets told:
 //   note → only @mentioned people · FYI → mentioned + followers, to read and
 //   clear · needs action → stays in the tagged people's inbox until cleared.
-export default function StepComposer({ momentId, stepId, people, defaultMention, parentId = null, onDone }: {
-  momentId: string
+export default function StepComposer({ jobId, stepId, people, defaultMention, parentId = null, onDone }: {
+  jobId: string
   stepId: string | null
   people: Person[]
   defaultMention?: string | null
@@ -29,7 +29,7 @@ export default function StepComposer({ momentId, stepId, people, defaultMention,
   const submit = () => {
     setError(null)
     start(async () => {
-      const res = await addComment({ momentId, stepId, body, kind, mentions, parentId })
+      const res = await addComment({ jobId, stepId, body, kind, mentions, parentId })
       if (!res.ok) { setError(res.error); return }
       setBody('')
       setMentions([])
@@ -40,9 +40,9 @@ export default function StepComposer({ momentId, stepId, people, defaultMention,
 
   return (
     <div className={`mo-composer${isReply ? ' mo-composer-reply' : ''}`}>
-      <label htmlFor={`composer-${parentId ?? stepId ?? momentId}`} style={{ marginBottom: 0 }}>{isReply ? 'Reply' : 'Internal comment'}</label>
+      <label htmlFor={`composer-${parentId ?? stepId ?? jobId}`} style={{ marginBottom: 0 }}>{isReply ? 'Reply' : 'Internal comment'}</label>
       <textarea
-        id={`composer-${parentId ?? stepId ?? momentId}`}
+        id={`composer-${parentId ?? stepId ?? jobId}`}
         value={body}
         autoFocus={isReply}
         onChange={e => setBody(e.target.value)}

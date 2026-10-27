@@ -1,10 +1,10 @@
 'use client'
 
 import { useState } from 'react'
-import type { StepComment } from '@/lib/moments/model'
+import type { StepComment } from '@/lib/jobs/model'
 import StepComposer from './StepComposer'
 import type { Person } from './StepControls'
-import './moments.css'
+import './jobs.css'
 
 const when = (iso: string) =>
   new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(iso))
@@ -26,10 +26,10 @@ function Comment({ c, nameOf }: { c: StepComment; nameOf: (id: string | null) =>
 
 // Top-level comments in order, each followed by its replies. Replies always
 // hang off the first comment of a thread, so there is only one level.
-export default function CommentThreads({ comments, people, momentId, stepId, emptyText }: {
+export default function CommentThreads({ comments, people, jobId, stepId, emptyText }: {
   comments: StepComment[]
   people: Person[]
-  momentId: string
+  jobId: string
   stepId: string | null
   emptyText: string
 }) {
@@ -53,7 +53,7 @@ export default function CommentThreads({ comments, people, momentId, stepId, emp
             )}
             {replyingTo === root.id ? (
               <div className="mo-replies">
-                <StepComposer momentId={momentId} stepId={stepId} people={people} parentId={root.id} onDone={() => setReplyingTo(null)} />
+                <StepComposer jobId={jobId} stepId={stepId} people={people} parentId={root.id} onDone={() => setReplyingTo(null)} />
               </div>
             ) : (
               <button type="button" className="mo-reply-btn" onClick={() => setReplyingTo(root.id)}>

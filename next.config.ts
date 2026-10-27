@@ -40,6 +40,14 @@ const nextConfig: NextConfig = {
     ]
   },
 
+  // Moments became one kind of job and kept their ids, so old links still land.
+  async redirects() {
+    return [
+      { source: '/moments', destination: '/jobs', permanent: false },
+      { source: '/moments/:id', destination: '/jobs/:id', permanent: false },
+    ]
+  },
+
   // Whitelist the hosts we serve images from so <Image /> can optimize them.
   // Any Supabase Storage bucket on our project + Google Drive public links
   // (used by creative assets) are the two sources today.

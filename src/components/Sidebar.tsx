@@ -51,7 +51,7 @@ const MyWorkIcon = (
   </svg>
 )
 
-const MomentsIcon = (
+const JobsIcon = (
   <svg width={iconSize} height={iconSize} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
     <line x1="8" y1="6" x2="21" y2="6" />
     <line x1="8" y1="12" x2="21" y2="12" />
@@ -191,10 +191,10 @@ export default function Sidebar({ email, showFinancials, capacity = null, showCo
       icon: MyWorkIcon,
     },
     {
-      href: '/moments',
-      label: 'Moments',
-      matches: (p) => p.startsWith('/moments'),
-      icon: MomentsIcon,
+      href: '/jobs',
+      label: 'Jobs',
+      matches: (p) => p.startsWith('/jobs'),
+      icon: JobsIcon,
     },
     {
       href: '/',
