@@ -218,3 +218,19 @@ test('mode flags default only when missing, including history; explicit nonboole
     assert.throws(() => updateDraft(original, { [key]: true }), /Reopen/)
   }
 })
+
+test('motion references are optional across copy and promotion modes', () => {
+  for (const useClientCopy of [false, true]) for (const noPreBf of [false, true]) {
+    const draft = { ...completed(), useClientCopy, noPreBf, motionIds: [] }
+    if (useClientCopy) { draft.approvedCopyIds = []; draft.approvedCopiesRevision = null }
+    if (noPreBf) draft.offers.pre = createDraft(brand).offers.pre
+    assert.deepEqual(validateDraft(brand, draft), [])
+    const locked = lockDraft(brand, draft, true)
+    assert.deepEqual(locked.motionIds, [])
+    assert.deepEqual(locked.history[0].snapshot.motionIds, [])
+    const invalid = { ...draft, offers: { ...draft.offers, bf: createDraft(brand).offers.bf } }
+    assert.throws(() => lockDraft(brand, invalid, true), /Black Friday/)
+  }
+  const selected = completed()
+  assert.deepEqual(lockDraft(brand, selected, true).motionIds, selected.motionIds)
+})
