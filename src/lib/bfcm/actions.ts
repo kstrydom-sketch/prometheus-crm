@@ -3,15 +3,16 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { revalidatePath } from 'next/cache'
 import { createServiceClient } from '@/lib/supabase/service'
-import { validateOffers, approveCopies, lockDraft, reopenDraft, updateDraft, parseStoredDraft, type Draft, type DraftPatch } from './model'
+import { validateOffers, setCopyApproval, approveCopies, lockDraft, reopenDraft, updateDraft, parseStoredDraft, type Draft, type DraftPatch } from './model'
+import { planMotionReferences } from './content'
 import { loadPlan, requireBfcmEditor, resolveClientPlan } from './server'
 
-type Operation = 'save' | 'approve' | 'lock' | 'reopen' | 'apply-offers'
+type Operation = 'save' | 'approve' | 'lock' | 'reopen' | 'apply-offers' | 'approve-copy' | 'unapprove-copy' | 'regenerate-copy' | 'more-references'
 type Result = { ok: true; version: number; draft?: Draft } | { ok: false; error: string }
-const editable = ['offers', 'prePercent', 'allocation', 'allocationLocks', 'copies', 'motionIds', 'voiceover', 'sfx'] as const
+const editable = ['offers', 'prePercent', 'allocation', 'allocationLocks', 'copies', 'motionIds', 'voiceover', 'sfx', 'notes'] as const
 
-async function persist(slug: string, input: Draft, expectedVersion: number, operation: Operation): Promise<Result> {
-  if (!['save', 'approve', 'lock', 'reopen', 'apply-offers'].includes(operation) || !Number.isSafeInteger(expectedVersion) || expectedVersion < 0) return { ok: false, error: 'Invalid request.' }
+async function persist(slug: string, input: Draft, expectedVersion: number, operation: Operation, copyId?: string): Promise<Result> {
+  if (!['save', 'approve', 'lock', 'reopen', 'apply-offers', 'approve-copy', 'unapprove-copy', 'regenerate-copy', 'more-references'].includes(operation) || !Number.isSafeInteger(expectedVersion) || expectedVersion < 0) return { ok: false, error: 'Invalid request.' }
   // Runtime validation is required: exported server actions are public POST endpoints.
   const raw = JSON.stringify(input)
   if (raw.length > 240_000) return { ok: false, error: 'This plan is too large. Shorten the text before saving.' }
@@ -20,7 +21,7 @@ async function persist(slug: string, input: Draft, expectedVersion: number, oper
   const client = createServiceClient()
   const { row, brand, config, draft: current } = await loadPlan(slug, client)
   if (row.version !== expectedVersion) return { ok: false, error: 'This plan was changed in another session. Reload before continuing; your changes have not been overwritten.' }
-  const allowedRefs = new Set(config.motionReferences.map(ref => ref.id))
+  const allowedRefs = new Set(planMotionReferences(config).map(ref => ref.id))
   if (candidate.motionIds.length > 10 || candidate.motionIds.some(id => !allowedRefs.has(id))) return { ok: false, error: 'Invalid motion reference for this brand.' }
   if (candidate.copies.some((copy, i) => copy.id !== current.copies[i].id || copy.source !== current.copies[i].source)) return { ok: false, error: 'Copy source labels cannot be changed.' }
   const patch: DraftPatch = {}
@@ -35,7 +36,20 @@ async function persist(slug: string, input: Draft, expectedVersion: number, oper
     next = updateDraft({ ...current, allocationLocks: candidate.allocationLocks }, patch)
   } else {
     if (Object.keys(patch).length) return { ok: false, error: 'Wait for your changes to save before confirming.' }
-    if (operation === 'apply-offers') {
+    if (current.status === 'locked' && operation !== 'reopen') return { ok: false, error: 'Explicitly reopen the plan before editing.' }
+    if (['approve-copy', 'unapprove-copy', 'regenerate-copy'].includes(operation) && (typeof copyId !== 'string' || !current.copies.some(copy => copy.id === copyId))) return { ok: false, error: 'Invalid copy line.' }
+    if (operation === 'approve-copy' || operation === 'unapprove-copy') next = setCopyApproval(current, copyId!, operation === 'approve-copy')
+    if (operation === 'more-references') {
+      const visible = current.visibleMotionIds ?? config.motionReferences.map(ref => ref.id)
+      const replacements = planMotionReferences(config).map(ref => ref.id).filter(id => !visible.includes(id) && !current.motionIds.includes(id))
+      if (!replacements.length || current.motionIds.length === 10) return { ok: false, error: 'No more unselected references are available.' }
+      let cursor = 0
+      const visibleMotionIds = visible.map(id => current.motionIds.includes(id) ? id : replacements[cursor++] ?? id)
+      next = { ...current, visibleMotionIds, revision: current.revision + 1 }
+    }
+    if (operation === 'apply-offers' || operation === 'regenerate-copy') {
+      if (operation === 'regenerate-copy' && current.approvedCopyIds.includes(copyId!)) return { ok: false, error: 'Unapprove this copy before generating a replacement.' }
+      if (current.approvedCopyIds.length === current.copies.length) return { ok: false, error: 'All copy is approved. Unapprove a line before generating a replacement.' }
       if (current.status === 'locked') return { ok: false, error: 'Reopen the plan before generating copy.' }
       const errors = validateOffers(current.offers)
       if (errors.length) return { ok: false, error: errors.join(' ') }
@@ -49,7 +63,7 @@ async function persist(slug: string, input: Draft, expectedVersion: number, oper
       }
       const { data: claimed, error: claimError } = await client.rpc('bfcm_claim_generation', { p_slug: slug, p_expected_version: row.version })
       if (claimError || claimed !== true) return { ok: false, error: 'Wait 60 seconds between generations, or reload if the plan has changed.' }
-      const copies = await generateBfcmCopies(brand, current, linkedName, config.websiteFacts)
+      const copies = await generateBfcmCopies(brand, current, linkedName, config.websiteFacts, operation === 'regenerate-copy' ? copyId : undefined)
       next = updateDraft(current, { copies })
     }
     if (operation === 'approve') next = approveCopies(current)
@@ -70,20 +84,20 @@ async function persist(slug: string, input: Draft, expectedVersion: number, oper
   return { ok: true, version }
 }
 
-export async function saveStaffBfcmPlan(slug: string, draft: Draft, expectedVersion: number, operation: Operation = 'save'): Promise<Result> {
+export async function saveStaffBfcmPlan(slug: string, draft: Draft, expectedVersion: number, operation: Operation = 'save', copyId?: string): Promise<Result> {
   try {
     await requireBfcmEditor()
-    return await persist(slug, draft, expectedVersion, operation)
+    return await persist(slug, draft, expectedVersion, operation, copyId)
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : 'Unable to save the plan.' }
   }
 }
-export async function saveClientBfcmPlan(token: string, draft: Draft, expectedVersion: number, operation: Operation = 'save'): Promise<Result> {
+export async function saveClientBfcmPlan(token: string, draft: Draft, expectedVersion: number, operation: Operation = 'save', copyId?: string): Promise<Result> {
   try {
     const resolved = await resolveClientPlan(token)
     if (!resolved) return { ok: false, error: 'Invalid or unavailable link.' }
     // slug is derived solely from verified module token → plan. Never draft.brandSlug.
-    return await persist(resolved.slug, draft, expectedVersion, operation)
+    return await persist(resolved.slug, draft, expectedVersion, operation, copyId)
   } catch {
     return { ok: false, error: 'Unable to save. Try again or contact the team.' }
   }
