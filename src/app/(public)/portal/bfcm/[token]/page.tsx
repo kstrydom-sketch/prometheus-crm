@@ -6,7 +6,7 @@ import { saveClientBfcmPlan } from '@/lib/bfcm/actions'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
-export const metadata: Metadata = { title: 'Plano BFCM', robots: { index: false, follow: false }, referrer: 'no-referrer' }
+export const metadata: Metadata = { title: 'BFCM Plan', robots: { index: false, follow: false }, referrer: 'no-referrer' }
 export default async function ClientBfcmPlanPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params
   const resolved = await resolveClientPlan(token)

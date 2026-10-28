@@ -11,11 +11,11 @@ export default function BfcmFixture() {
   const state = useRef(draft)
   async function save(input: Draft, expected: number, operation: 'save'|'approve'|'lock'|'reopen'|'apply-offers') {
     await new Promise(resolve => setTimeout(resolve, 150))
-    if (expected !== version.current) return { ok: false as const, error: 'Conflito de teste.' }
-    if (operation === 'apply-offers') return { ok: false as const, error: 'Fixture: IA desativada. Nenhuma chamada externa foi feita.' }
+    if (expected !== version.current) return { ok: false as const, error: 'Test save conflict.' }
+    if (operation === 'apply-offers') return { ok: false as const, error: 'Fixture: AI is disabled. No external call was made.' }
     const next = operation === 'approve' ? approveCopies(state.current) : operation === 'lock' ? lockDraft(brand, state.current, true) : operation === 'reopen' ? reopenDraft(state.current, true) : input
     state.current = next
     return { ok: true as const, version: ++version.current, ...(operation !== 'save' ? { draft: next } : {}) }
   }
-  return <><p style={{ padding: 12, background: '#fff2cd', color: '#533800', textAlign: 'center' }}>Fictional preview fixture · in-memory saves only · no client data · no Supabase/AI writes</p><BfcmPlanner brand={brand} initialDraft={draft} initialVersion={0} saveAction={save} motionReferences={refs} sourceNotice="Dados fictícios para QA. As dez referências usam o mesmo vídeo público de teste." backHref="/offer-preview-qa/bfcm" /></>
+  return <><p style={{ padding: 12, background: '#fff2cd', color: '#533800', textAlign: 'center' }}>Fictional preview fixture · in-memory saves only · no client data · no Supabase/AI writes</p><BfcmPlanner brand={brand} initialDraft={draft} initialVersion={0} saveAction={save} motionReferences={refs} sourceNotice="Fictional QA data. All ten references use the same public test video." backHref="/offer-preview-qa/bfcm" /></>
 }

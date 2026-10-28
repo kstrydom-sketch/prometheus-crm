@@ -9,22 +9,22 @@ import { parsePlanConfig } from './content'
 export type PlanRow = { slug: string; brand_id: string | null; state: unknown; config: unknown; version: number; updated_at: string }
 export async function requireBfcmEditor() {
   const user = await getCachedUser()
-  if (!user || !await canEdit(user.email)) throw new Error('Acesso não autorizado.')
+  if (!user || !await canEdit(user.email)) throw new Error('Unauthorized access.')
   return user
 }
 export async function loadPlan(slug: string, client = createServiceClient()) {
-  if (!/^[a-z0-9][a-z0-9-]{0,99}$/.test(slug)) throw new Error('Plano não encontrado.')
+  if (!/^[a-z0-9][a-z0-9-]{0,99}$/.test(slug)) throw new Error('Plan not found.')
   const { data, error } = await client.from('bfcm_plans').select('slug,brand_id,state,config,version,updated_at').eq('slug', slug).single()
-  if (error || !data) throw new Error('O módulo BFCM ainda não está disponível. Nenhuma alteração foi salva.')
+  if (error || !data) throw new Error('The BFCM module is not available yet. No changes have been saved.')
   const row = data as PlanRow
   const config = parsePlanConfig(row.config, slug)
-  if (!config) throw new Error('Configuração privada do plano indisponível.')
+  if (!config) throw new Error('Private plan configuration is unavailable.')
   const brand = config.brand
   const { data: versions, error: versionsError } = await client.from('bfcm_plan_versions').select('version,snapshot,locked_at').eq('plan_slug', slug).order('version', { ascending: true })
-  if (versionsError) throw new Error('Não foi possível carregar o histórico BFCM.')
+  if (versionsError) throw new Error('Unable to load BFCM version history.')
   const history = (versions ?? []).map((v, i) => ({ version: i + 1, lockedAt: v.locked_at as string, snapshot: v.snapshot as PlanSnapshot }))
   const draft = row.state === null ? createDraft(brand, config.initialCopies) : parseStoredDraft(JSON.stringify({ ...(row.state as object), history }), slug)
-  if (!draft) throw new Error('Plano inválido. Entre em contato com a equipe antes de continuar.')
+  if (!draft) throw new Error('Invalid plan. Contact the team before continuing.')
   return { row, brand, config, draft: draft as Draft }
 }
 export async function resolveClientPlan(token: string) {
