@@ -189,6 +189,12 @@ export default function Sidebar({ email, showFinancials, capacity = null, showCo
       icon: ResultsIcon,
     },
     {
+      href: '/bfcm-creatives',
+      label: 'BFCM Creatives',
+      matches: (p) => p.startsWith('/bfcm-creatives'),
+      icon: InspirationIcon,
+    },
+    {
       href: '/offers',
       label: 'Offers',
       matches: (p) => p.startsWith('/offers'),
