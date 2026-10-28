@@ -10,10 +10,6 @@ import type { NextRequest } from 'next/server'
 // agent posts daily campaign results and has no session cookie).
 const PUBLIC_PREFIXES = ['/login', '/review', '/portal', '/showcase', '/offer-preview-qa', '/approvals', '/offer-approval', '/auth', '/api/preview', '/api/review', '/api/creative', '/api/cron', '/api/results']
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!.trim()
-const PROJECT_REF = new URL(SUPABASE_URL).hostname.split('.')[0]
-const COOKIE_NAME = `sb-${PROJECT_REF}-auth-token`
-
 function b64Decode(s: string): string {
   const normalized = s.replace(/-/g, '+').replace(/_/g, '/')
   return atob(normalized + '='.repeat((4 - (normalized.length % 4)) % 4))
@@ -21,12 +17,12 @@ function b64Decode(s: string): string {
 
 // Read the (possibly chunked) @supabase/ssr auth cookie and pull out the
 // access token — no network call.
-function readAccessToken(request: NextRequest): string | null {
-  let raw = request.cookies.get(COOKIE_NAME)?.value ?? ''
+function readAccessToken(request: NextRequest, cookieName: string): string | null {
+  let raw = request.cookies.get(cookieName)?.value ?? ''
   if (!raw) {
     // @supabase/ssr splits large sessions into `.0`, `.1`, … chunk cookies
     for (let i = 0; ; i++) {
-      const chunk = request.cookies.get(`${COOKIE_NAME}.${i}`)?.value
+      const chunk = request.cookies.get(`${cookieName}.${i}`)?.value
       if (!chunk) break
       raw += chunk
     }
@@ -54,8 +50,17 @@ function tokenIsFresh(token: string): boolean {
 }
 
 export async function middleware(request: NextRequest) {
+  // Exact fictional fixture only: preview QA needs no production credentials.
+  // The page also rejects production. Real routes never take this path.
+  if (process.env.VERCEL_ENV === 'preview' && request.nextUrl.pathname === '/offer-preview-qa/bfcm') {
+    return NextResponse.next({ request })
+  }
+  const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim()
+  if (!SUPABASE_URL) return new NextResponse('Authentication is not configured.', { status: 503 })
+  const projectRef = new URL(SUPABASE_URL).hostname.split('.')[0]
+  const cookieName = `sb-${projectRef}-auth-token`
   const isPublic = PUBLIC_PREFIXES.some(p => request.nextUrl.pathname.startsWith(p))
-  const token = readAccessToken(request)
+  const token = readAccessToken(request, cookieName)
 
   // Fast path (the ~hourly common case): unexpired session cookie → continue
   // with zero network round-trips. Previously this called auth.getUser() —
