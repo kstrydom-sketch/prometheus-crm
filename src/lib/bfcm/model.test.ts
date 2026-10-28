@@ -1,6 +1,6 @@
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
-import { createDraft, updateDraft, approveCopies, lockDraft, reopenDraft, validateAllocation, validateOffers, stageQuantities, parseStoredDraft, allocationLimits, setCopyApproval, isCopyApproved, mergeUnapprovedCopies, type Brand, type Draft } from './model'
+import { createDraft, updateDraft, approveCopies, lockDraft, reopenDraft, validateAllocation, validateOffers, stageQuantities, parseStoredDraft, allocationLimits, setCopyApproval, isCopyApproved, mergeUnapprovedCopies, effectivePrePercent, validateDraft, type Brand, type Draft } from './model'
 const brand: Brand = { slug: 'example-brand', name: 'Example Brand', cap: 100, aliases: [], contract: { kind: 'exact', quantities: { textOffer: 20, refreshedStatic: 20, newStatic: 20, refreshedVideo: 20, motionGraphics: 20 } } }
 const groupedBrand: Brand = { slug: 'example-grouped', name: 'Example Grouped Brand', cap: 100, aliases: [], contract: { kind: 'grouped', static: 70, motion: 30 } }
 const flexibleBrand: Brand = { slug: 'example-flexible', name: 'Example Flexible Brand', cap: 100, aliases: [], contract: { kind: 'flexible' } }
@@ -141,4 +141,80 @@ test('legacy notes and attachments initialize only absent fields; invalid payloa
   assert.equal(parseStoredDraft(JSON.stringify({ ...original, fileIds: ['../other-plan'] }), brand.slug), null)
   const fileIds = ['12345678-1234-1234-1234-123456789abc']
   assert.deepEqual(parseStoredDraft(JSON.stringify({ ...original, fileIds }), brand.slug)?.fileIds, fileIds)
+})
+
+for (const useClientCopy of [false, true]) for (const noPreBf of [false, true]) {
+  test(`planning mode combination clientCopy=${useClientCopy}, noPreBf=${noPreBf}`, () => {
+    const done = completed()
+    let draft = updateDraft(createDraft(brand), {
+      offers: { pre: noPreBf ? createDraft(brand).offers.pre : done.offers.pre, bf: done.offers.bf },
+      motionIds: done.motionIds, useClientCopy, noPreBf,
+    })
+    if (!useClientCopy) {
+      assert.ok(validateDraft(brand, draft).some(e => e.includes('copy')))
+      draft = approveCopies(updateDraft(draft, { copies: done.copies }))
+    }
+    assert.deepEqual(validateDraft(brand, draft), [])
+    const locked = lockDraft(brand, draft, true)
+    assert.equal(locked.status, 'locked')
+    assert.equal(locked.history[0].snapshot.useClientCopy, useClientCopy)
+    assert.equal(locked.history[0].snapshot.noPreBf, noPreBf)
+    assert.equal(effectivePrePercent(draft), noPreBf ? 0 : 30)
+    if (useClientCopy) {
+      assert.deepEqual(locked.approvedCopyIds, [])
+      assert.equal(locked.approvedCopiesRevision, null)
+      assert.ok(locked.copies.every(c => c.text === ''))
+    }
+  })
+}
+test('client-copy toggle preserves every row and approval, without approving or editing CRM copy', () => {
+  for (const initial of [createDraft(brand), completed()]) {
+    const enabled = updateDraft(initial, { useClientCopy: true })
+    assert.deepEqual(enabled.copies, initial.copies)
+    assert.deepEqual(enabled.approvedCopyIds, initial.approvedCopyIds)
+    assert.equal(enabled.approvedCopiesRevision, initial.approvedCopiesRevision)
+    assert.throws(() => approveCopies(enabled), /Client-provided/)
+    assert.throws(() => setCopyApproval(enabled, enabled.copies[0].id, true), /Client-provided/)
+    assert.throws(() => updateDraft(enabled, { copies: enabled.copies }), /client-provided/)
+    const disabled = updateDraft(enabled, { useClientCopy: false })
+    assert.deepEqual(disabled.copies, initial.copies)
+    assert.deepEqual(disabled.approvedCopyIds, initial.approvedCopyIds)
+    assert.equal(disabled.approvedCopiesRevision, initial.approvedCopiesRevision)
+  }
+  const draft = completed()
+  const bypass = updateDraft({ ...draft, approvedCopyIds: [], approvedCopiesRevision: null }, { useClientCopy: true })
+  assert.deepEqual(validateDraft(brand, bypass), [])
+  assert.ok(validateDraft(brand, updateDraft(bypass, { useClientCopy: false })).some(e => e.includes('approve')))
+})
+test('no-pre-BF preserves disabled inputs and restores split on reenable', () => {
+  const original = updateDraft(completed(), { prePercent: 43 })
+  const disabled = updateDraft(original, { noPreBf: true })
+  assert.deepEqual(disabled.offers, original.offers)
+  assert.equal(disabled.prePercent, 43)
+  assert.deepEqual(stageQuantities(brand.cap, effectivePrePercent(disabled)), { pre: 0, bf: 100 })
+  assert.equal(disabled.approvedCopiesRevision, null)
+  assert.deepEqual(disabled.approvedCopyIds, original.approvedCopyIds)
+  const reenabled = updateDraft(disabled, { noPreBf: false })
+  assert.deepEqual(reenabled.offers, original.offers)
+  assert.equal(effectivePrePercent(reenabled), 43)
+  const incompletePre = { ...original.offers, pre: createDraft(brand).offers.pre }
+  assert.deepEqual(validateOffers(incompletePre, true), [])
+  assert.ok(validateOffers(incompletePre, false).length)
+  assert.ok(validateOffers({ ...incompletePre, bf: createDraft(brand).offers.bf }, true).length)
+})
+test('mode flags default only when missing, including history; explicit nonbooleans rejected', () => {
+  const original = lockDraft(brand, completed(), true)
+  const legacy = JSON.parse(JSON.stringify(original))
+  delete legacy.useClientCopy; delete legacy.noPreBf
+  delete legacy.history[0].snapshot.useClientCopy; delete legacy.history[0].snapshot.noPreBf
+  assert.deepEqual(parseStoredDraft(JSON.stringify(legacy), brand.slug), original)
+  for (const key of ['useClientCopy', 'noPreBf']) {
+    for (const value of ['true', 'false', 1, 0, null, [], {}]) {
+      assert.equal(parseStoredDraft(JSON.stringify({ ...original, [key]: value }), brand.slug), null)
+      const badHistory = structuredClone(original)
+      Object.assign(badHistory.history[0].snapshot, { [key]: value })
+      assert.equal(parseStoredDraft(JSON.stringify(badHistory), brand.slug), null)
+    }
+    assert.throws(() => updateDraft(original, { [key]: true }), /Reopen/)
+  }
 })
