@@ -9,7 +9,7 @@ import { loadPlan, requireBfcmEditor, resolveClientPlan } from './server'
 
 type Operation = 'save' | 'approve' | 'lock' | 'reopen' | 'apply-offers' | 'approve-copy' | 'unapprove-copy' | 'regenerate-copy' | 'more-references'
 type Result = { ok: true; version: number; draft?: Draft } | { ok: false; error: string }
-const editable = ['offers', 'prePercent', 'allocation', 'allocationLocks', 'copies', 'motionIds', 'voiceover', 'sfx', 'notes'] as const
+const editable = ['offers', 'prePercent', 'allocation', 'allocationLocks', 'copies', 'motionIds', 'voiceover', 'sfx', 'notes', 'useClientCopy', 'noPreBf'] as const
 
 async function persist(slug: string, input: Draft, expectedVersion: number, operation: Operation, copyId?: string): Promise<Result> {
   if (!['save', 'approve', 'lock', 'reopen', 'apply-offers', 'approve-copy', 'unapprove-copy', 'regenerate-copy', 'more-references'].includes(operation) || !Number.isSafeInteger(expectedVersion) || expectedVersion < 0) return { ok: false, error: 'Invalid request.' }
@@ -48,10 +48,11 @@ async function persist(slug: string, input: Draft, expectedVersion: number, oper
       next = { ...current, visibleMotionIds, revision: current.revision + 1 }
     }
     if (operation === 'apply-offers' || operation === 'regenerate-copy') {
+      if (current.useClientCopy) return { ok: false, error: 'Client-provided copy is selected. Turn it off before generating CRM copy.' }
       if (operation === 'regenerate-copy' && current.approvedCopyIds.includes(copyId!)) return { ok: false, error: 'Unapprove this copy before generating a replacement.' }
       if (current.approvedCopyIds.length === current.copies.length) return { ok: false, error: 'All copy is approved. Unapprove a line before generating a replacement.' }
       if (current.status === 'locked') return { ok: false, error: 'Reopen the plan before generating copy.' }
-      const errors = validateOffers(current.offers)
+      const errors = validateOffers(current.offers, current.noPreBf)
       if (errors.length) return { ok: false, error: errors.join(' ') }
       const { generateBfcmCopies } = await import('./generate')
       // Keep the existing hypercare restriction, including the actual linked brand name.
