@@ -1,3 +1,4 @@
+import { planMotionReferences } from '@/lib/bfcm/content'
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import BfcmPlanner from '@/components/bfcm/BfcmPlanner'
@@ -12,5 +13,5 @@ export default async function ClientBfcmPlanPage({ params }: { params: Promise<{
   const resolved = await resolveClientPlan(token)
   if (!resolved) notFound()
   const loaded = await loadPlan(resolved.slug, resolved.client)
-  return <BfcmPlanner brand={loaded.brand} initialDraft={loaded.draft} initialVersion={loaded.row.version} saveAction={saveClientBfcmPlan.bind(null, token)} motionReferences={loaded.config.motionReferences} sourceNotice={loaded.config.sourceNotice} backHref={`/portal/bfcm/${token}`} />
+  return <BfcmPlanner brand={loaded.brand} initialDraft={loaded.draft} initialVersion={loaded.row.version} saveAction={saveClientBfcmPlan.bind(null, token)} motionReferences={planMotionReferences(loaded.config)} sourceNotice={loaded.config.sourceNotice} backHref={`/portal/bfcm/${token}`} />
 }

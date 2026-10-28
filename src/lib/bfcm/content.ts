@@ -5,6 +5,7 @@ export type PlanConfig = {
   brand: Brand
   initialCopies: CopyLine[]
   motionReferences: MotionReference[]
+  motionReferencePool?: MotionReference[]
   websiteFacts: { sources: { url: string; facts: string[] }[]; constraints: string[] }
   sourceNotice: string
 }
@@ -20,6 +21,11 @@ export function parsePlanConfig(value: unknown, slug: string): PlanConfig | null
   if (!Array.isArray(config.initialCopies) || config.initialCopies.length !== 30 || config.initialCopies.some(c => !c || typeof c.id !== 'string' || typeof c.text !== 'string' || !['BF anterior', 'Recente', 'Nova'].includes(c.source)) || new Set(config.initialCopies.map(c => c.id)).size !== 30) return null
   const secureUrl = (url: unknown) => { try { return typeof url === 'string' && new URL(url).protocol === 'https:' } catch { return false } }
   if (!Array.isArray(config.motionReferences) || config.motionReferences.length !== 10 || new Set(config.motionReferences.map(r => r.id)).size !== 10 || config.motionReferences.some(r => !r || ['id','title','category','format'].some(k => typeof r[k as keyof MotionReference] !== 'string') || !secureUrl(r.thumbnailUrl) || !secureUrl(r.videoUrl))) return null
+  if (config.motionReferencePool !== undefined && (!Array.isArray(config.motionReferencePool) || config.motionReferencePool.length > 200 || new Set(config.motionReferencePool.map(r => r.id)).size !== config.motionReferencePool.length || config.motionReferencePool.some(r => !r || ['id','title','category','format'].some(k => typeof r[k as keyof MotionReference] !== 'string') || !secureUrl(r.thumbnailUrl) || !secureUrl(r.videoUrl)))) return null
   if (typeof config.sourceNotice !== 'string' || !config.websiteFacts || !Array.isArray(config.websiteFacts.sources) || !Array.isArray(config.websiteFacts.constraints)) return null
   return config
+}
+
+export function planMotionReferences(config: PlanConfig): MotionReference[] {
+  return [...new Map([...config.motionReferences, ...(config.motionReferencePool ?? [])].map(ref => [ref.id, ref])).values()]
 }
