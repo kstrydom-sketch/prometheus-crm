@@ -17,6 +17,7 @@ export type CopyLine = { id: string; text: string; source: 'BF anterior' | 'Rece
 export type Draft = {
   schemaVersion: 1; brandSlug: string; revision: number; copyRevision: number; status: 'draft' | 'locked'
   offers: { pre: StageOffer; bf: StageOffer }; prePercent: number; allocation: Allocation; allocationLocks: Category[]
+  notes: string; fileIds: string[]
   copies: CopyLine[]; approvedCopyIds: string[]; approvedCopiesRevision: number | null; motionIds: string[]; visibleMotionIds?: string[]; voiceover: boolean; sfx: boolean
   history: PlanVersion[]
 }
@@ -31,7 +32,7 @@ export function suggestedAllocation(brand: Brand): Allocation {
 const blankOffer = (): StageOffer => ({ offer: '', startDate: '', endDate: '', sitewide: true, included: '', hasExclusions: false, exclusions: '' })
 export function createDraft(brand: Brand, copies?: CopyLine[]): Draft {
   if (copies && (copies.length !== 30 || new Set(copies.map(c => c.id)).size !== 30)) throw new Error('Exactly 30 uniquely identified copy lines are required.')
-  return { schemaVersion: 1, brandSlug: brand.slug, revision: 0, copyRevision: 0, status: 'draft', offers: { pre: blankOffer(), bf: blankOffer() }, prePercent: 30, allocation: suggestedAllocation(brand), allocationLocks: [], copies: copies ? structuredClone(copies) : Array.from({ length: 30 }, (_, i) => ({ id: `copy-${i + 1}`, text: '', source: 'Nova' as const })), approvedCopyIds: [], approvedCopiesRevision: null, motionIds: [], voiceover: false, sfx: false, history: [] }
+  return { schemaVersion: 1, brandSlug: brand.slug, revision: 0, copyRevision: 0, status: 'draft', offers: { pre: blankOffer(), bf: blankOffer() }, prePercent: 30, allocation: suggestedAllocation(brand), allocationLocks: [], notes: '', fileIds: [], copies: copies ? structuredClone(copies) : Array.from({ length: 30 }, (_, i) => ({ id: `copy-${i + 1}`, text: '', source: 'Nova' as const })), approvedCopyIds: [], approvedCopiesRevision: null, motionIds: [], voiceover: false, sfx: false, history: [] }
 }
 export function stageQuantities(total: number, prePercent: number) { const pre = Math.round(total * prePercent / 100); return { pre, bf: total - pre } }
 /** Category quantities are suggestions; only static/motion group totals are contracted. */
@@ -71,7 +72,7 @@ export function validateCopies(copies: CopyLine[]): string[] {
 export function validateDraft(brand: Brand, draft: Draft): string[] {
   return [...(draft.brandSlug !== brand.slug ? ['Brand mismatch.'] : []), ...validateOffers(draft.offers), ...validateAllocation(brand, draft.allocation), ...validateCopies(draft.copies), ...(!Number.isInteger(draft.prePercent) || draft.prePercent < 0 || draft.prePercent > 100 ? ['Stage allocation must be between 0 and 100%.'] : []), ...(draft.approvedCopiesRevision !== draft.copyRevision || draft.copies.some(c => !isCopyApproved(draft, c.id)) ? ['Explicitly approve the current 30 copy lines.'] : []), ...(draft.motionIds.length === 0 ? ['Select at least one motion reference.'] : [])]
 }
-export type DraftPatch = Partial<Pick<Draft, 'offers' | 'prePercent' | 'allocation' | 'allocationLocks' | 'copies' | 'motionIds' | 'voiceover' | 'sfx'>>
+export type DraftPatch = Partial<Pick<Draft, 'offers' | 'prePercent' | 'allocation' | 'allocationLocks' | 'copies' | 'motionIds' | 'voiceover' | 'sfx' | 'notes'>>
 export function updateDraft(draft: Draft, patch: DraftPatch): Draft {
   if (draft.status === 'locked') throw new Error('Reopen this plan before editing.')
   if (patch.allocation && draft.allocationLocks.some(c => patch.allocation![c] !== draft.allocation[c])) throw new Error('Unlock the category before changing its quantity.')
@@ -125,6 +126,8 @@ export function parseStoredDraft(raw: string, brandSlug: string): Draft | null {
     if (!isDraftShape(draft, brandSlug)) return null
     // Upgrade only the missing approval field. Never reset existing edits, offers, or history.
     const upgrade = (snapshot: PlanSnapshot) => {
+      if (!Object.prototype.hasOwnProperty.call(snapshot, 'fileIds')) Object.assign(snapshot, { fileIds: [] })
+      if (!Object.prototype.hasOwnProperty.call(snapshot, 'notes')) Object.assign(snapshot, { notes: '' })
       if (!Object.prototype.hasOwnProperty.call(snapshot, 'approvedCopyIds')) Object.assign(snapshot, { approvedCopyIds: snapshot.approvedCopiesRevision === snapshot.copyRevision ? snapshot.copies.map(c => c.id) : [] })
     }
     upgrade(draft)
@@ -139,6 +142,8 @@ function isDraftShape(value: unknown, brandSlug: string, historyAllowed = true):
   if (d.schemaVersion !== 1 || d.brandSlug !== brandSlug || !['draft', 'locked'].includes(String(d.status)) || !isInt(d.revision) || !isInt(d.copyRevision)) return false
   if (typeof d.prePercent !== 'number' || !Number.isInteger(d.prePercent) || d.prePercent < 0 || d.prePercent > 100) return false
   if (d.approvedCopiesRevision !== null && (!isInt(d.approvedCopiesRevision) || d.approvedCopiesRevision !== d.copyRevision)) return false
+  if ('fileIds' in d && (!Array.isArray(d.fileIds) || d.fileIds.length > 20 || d.fileIds.some(id => typeof id !== 'string' || !/^[a-f0-9-]{36}$/.test(id)) || new Set(d.fileIds).size !== d.fileIds.length)) return false
+  if ('notes' in d && (typeof d.notes !== 'string' || d.notes.length > 20_000)) return false
   if (typeof d.voiceover !== 'boolean' || typeof d.sfx !== 'boolean') return false
   if (!d.offers || typeof d.offers !== 'object') return false
   for (const stage of ['pre', 'bf']) {

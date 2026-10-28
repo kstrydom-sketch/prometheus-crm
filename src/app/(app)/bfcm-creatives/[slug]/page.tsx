@@ -1,3 +1,4 @@
+import { listBfcmFiles, prepareBfcmFileUpload, finalizeBfcmFileUpload, removeBfcmFile, getBfcmFileDownload, cleanupBfcmExpiredUploads } from '@/lib/bfcm/files'
 import { planMotionReferences } from '@/lib/bfcm/content'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
@@ -16,5 +17,8 @@ export default async function BfcmPlanPage({ params }: { params: Promise<{ slug:
   try { loaded = await loadPlan(slug) } catch {
     return <main style={{ padding: 40 }}><h1>BFCM Creatives</h1><p role="alert">Unable to load this plan. BFCM storage must be available before editing.</p><Link href="/bfcm-creatives">Back to brands</Link></main>
   }
-  return <><BfcmAccess slug={slug} /><BfcmPlanner brand={loaded.brand} initialDraft={loaded.draft} initialVersion={loaded.row.version} saveAction={saveStaffBfcmPlan.bind(null, slug)} motionReferences={planMotionReferences(loaded.config)} sourceNotice={loaded.config.sourceNotice} /></>
+  const fileAccess = { slug }
+  const files = await listBfcmFiles(fileAccess)
+  const fileActions = { prepare: prepareBfcmFileUpload.bind(null, fileAccess), finalize: finalizeBfcmFileUpload.bind(null, fileAccess), remove: removeBfcmFile.bind(null, fileAccess), download: getBfcmFileDownload.bind(null, fileAccess), cleanup: cleanupBfcmExpiredUploads.bind(null, fileAccess) }
+  return <><BfcmAccess slug={slug} /><BfcmPlanner brand={loaded.brand} initialFiles={files.ok ? files.files : []} initialFilesError={files.ok ? undefined : files.error} fileActions={fileActions} initialDraft={loaded.draft} initialVersion={loaded.row.version} saveAction={saveStaffBfcmPlan.bind(null, slug)} motionReferences={planMotionReferences(loaded.config)} sourceNotice={loaded.config.sourceNotice} /></>
 }

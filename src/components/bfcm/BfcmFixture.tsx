@@ -31,5 +31,5 @@ export default function BfcmFixture() {
     state.current = next
     return { ok: true as const, version: ++version.current, ...(operation !== 'save' ? { draft: next } : {}) }
   }
-  return <><p style={{ padding: 12, background: '#fff2cd', color: '#533800', textAlign: 'center' }}>Fictional preview fixture · in-memory saves only · no client data · no Supabase/AI writes</p><BfcmPlanner brand={brand} initialDraft={draft} initialVersion={0} saveAction={save} motionReferences={refs} sourceNotice="Fictional QA data. All references use the same public test video." backHref="/offer-preview-qa/bfcm" /></>
+  return <><p style={{ padding: 12, background: '#fff2cd', color: '#533800', textAlign: 'center' }}>Fictional preview fixture · in-memory saves only · no client data · no Supabase/AI writes</p><BfcmPlanner brand={brand} initialDraft={draft} initialVersion={0} saveAction={save} motionReferences={refs} fixtureFiles sourceNotice="Fictional QA data. All references use the same public test video." backHref="/offer-preview-qa/bfcm" /></>
 }

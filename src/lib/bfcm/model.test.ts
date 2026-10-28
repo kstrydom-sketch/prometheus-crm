@@ -122,3 +122,23 @@ test('optional visible reference IDs preserve backwards compatibility and reject
   assert.deepEqual(parseStoredDraft(JSON.stringify({ ...draft, visibleMotionIds: ['reference-a', 'reference-b'] }), brand.slug)?.visibleMotionIds, ['reference-a', 'reference-b'])
   assert.equal(parseStoredDraft(JSON.stringify({ ...draft, visibleMotionIds: ['reference-a', 'reference-a'] }), brand.slug), null)
 })
+
+test('shared notes persist across copies, motion and lock history without changing approval', () => {
+  const draft = completed()
+  const next = updateDraft(draft, { notes: 'Shared planning notes' })
+  assert.equal(next.copyRevision, draft.copyRevision)
+  assert.equal(next.approvedCopiesRevision, draft.approvedCopiesRevision)
+  assert.equal(updateDraft(next, { sfx: true }).notes, 'Shared planning notes')
+  const locked = lockDraft(brand, next, true)
+  assert.equal(locked.history[0].snapshot.notes, 'Shared planning notes')
+  assert.throws(() => updateDraft(locked, { notes: 'Changed' }))
+})
+test('legacy notes and attachments initialize only absent fields; invalid payloads rejected', () => {
+  const original = completed(), legacy = JSON.parse(JSON.stringify(original))
+  delete legacy.notes; delete legacy.fileIds
+  assert.deepEqual(parseStoredDraft(JSON.stringify(legacy), brand.slug), original)
+  assert.equal(parseStoredDraft(JSON.stringify({ ...original, notes: 'x'.repeat(20_001) }), brand.slug), null)
+  assert.equal(parseStoredDraft(JSON.stringify({ ...original, fileIds: ['../other-plan'] }), brand.slug), null)
+  const fileIds = ['12345678-1234-1234-1234-123456789abc']
+  assert.deepEqual(parseStoredDraft(JSON.stringify({ ...original, fileIds }), brand.slug)?.fileIds, fileIds)
+})

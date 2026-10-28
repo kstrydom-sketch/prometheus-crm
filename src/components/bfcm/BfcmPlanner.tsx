@@ -9,7 +9,19 @@ import styles from './BfcmPlanner.module.css'
 export type MotionReference = { id: string; title: string; category: string; format: string; thumbnailUrl: string; videoUrl: string }
 export type SaveOperation = 'save' | 'approve' | 'lock' | 'reopen' | 'apply-offers' | 'approve-copy' | 'unapprove-copy' | 'regenerate-copy' | 'more-references'
 export type SaveResult = { ok: true; version: number; draft?: Draft } | { ok: false; error: string }
-type Props = { brand: Brand; initialDraft: Draft; initialVersion: number; saveAction: (draft: Draft, expectedVersion: number, operation: SaveOperation, copyId?: string) => Promise<SaveResult>; motionReferences: MotionReference[]; sourceNotice?: string; backHref?: string }
+export type BfcmFile = { id: string; name: string; size: number; contentType: string; createdAt: string }
+type FileFailure = { ok: false; error: string }
+export type BfcmFileActions = {
+  prepare: (input: { fileName: string; contentType: string; byteSize: number }, expectedVersion: number) => Promise<{ ok: true; id: string; path: string; token: string; bucket: string; contentType: string } | FileFailure>
+  finalize: (id: string, expectedVersion: number) => Promise<{ ok: true; version: number; draft: Draft; files: BfcmFile[] } | FileFailure>
+  remove: (id: string, expectedVersion: number) => Promise<{ ok: true; version: number; draft: Draft; files: BfcmFile[] } | FileFailure>
+  cleanup?: (expectedVersion: number) => Promise<{ ok: true; cleaned: number } | FileFailure>
+  download: (id: string) => Promise<{ ok: true; url: string } | FileFailure>
+}
+const MAX_FILE_BYTES = 250 * 1024 * 1024
+const EMPTY_FILES: BfcmFile[] = []
+function fileSize(bytes: number) { return bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB` }
+type Props = { brand: Brand; initialDraft: Draft; initialVersion: number; saveAction: (draft: Draft, expectedVersion: number, operation: SaveOperation, copyId?: string) => Promise<SaveResult>; motionReferences: MotionReference[]; sourceNotice?: string; backHref?: string; initialFiles?: BfcmFile[]; initialFilesError?: string; fileActions?: BfcmFileActions; fixtureFiles?: boolean }
 
 const ALLOCATION_GROUPS = [
   { label: 'Statics', categories: CATEGORIES.filter(c => c.id === 'textOffer' || c.id === 'refreshedStatic' || c.id === 'newStatic') },
@@ -34,7 +46,7 @@ function OfferBlock({ title, offer, disabled, onChange }: {title:string; offer:S
   </div>
 }
 
-export default function BfcmPlanner({brand, initialDraft, initialVersion, saveAction, motionReferences, sourceNotice, backHref="/bfcm-creatives"}:Props) {
+export default function BfcmPlanner({brand, initialDraft, initialVersion, saveAction, motionReferences, sourceNotice, backHref="/bfcm-creatives", initialFiles=EMPTY_FILES, initialFilesError, fileActions, fixtureFiles=false}:Props) {
   const [draft,setDraft]=useState(initialDraft)
   const latest=useRef(initialDraft)
   const version=useRef(initialVersion)
@@ -53,8 +65,17 @@ export default function BfcmPlanner({brand, initialDraft, initialVersion, saveAc
   const [playing,setPlaying]=useState<MotionReference|null>(null)
   const [playbackError,setPlaybackError]=useState(false)
   const [historyVersion,setHistoryVersion]=useState<number|null>(null)
+  const [files,setFiles]=useState(initialFiles)
+  const [fileError,setFileError]=useState(initialFilesError??'')
+  const [fileProgress,setFileProgress]=useState('')
+  const [fileStatus,setFileStatus]=useState('')
+  const fileInput=useRef<HTMLInputElement|null>(null)
+  const fixtureUrls=useRef(new Map<string,string>())
+  const fileOperation=useRef(false)
+  useEffect(()=>{const urls=fixtureUrls.current;return()=>{for(const url of urls.values())URL.revokeObjectURL(url)}},[])
   const locked=draft.status==='locked'
   const disabled=locked||busy
+  const currentFiles=files.filter(file=>draft.fileIds?.includes(file.id))
   const visibleIds=draft.visibleMotionIds?.length?draft.visibleMotionIds:motionReferences.slice(0,10).map(ref=>ref.id)
   const refs=visibleIds.map(id=>motionReferences.find(ref=>ref.id===id)).filter((ref):ref is MotionReference=>!!ref)
   const approvedCount=draft.copies.filter(copy=>isCopyApproved(draft,copy.id)).length
@@ -97,16 +118,17 @@ export default function BfcmPlanner({brand, initialDraft, initialVersion, saveAc
     }catch(e){setError(e instanceof Error?e.message:'Could not update the plan.')}
   }
   useEffect(()=>{
-    const warn=(event:BeforeUnloadEvent)=>{if(latest.current.revision!==savedRevision.current){event.preventDefault();event.returnValue=''}}
+    const warn=(event:BeforeUnloadEvent)=>{if(fileOperation.current||latest.current.revision!==savedRevision.current){event.preventDefault();event.returnValue=''}}
     window.addEventListener('beforeunload',warn)
     return()=>{window.removeEventListener('beforeunload',warn);if(timer.current)clearTimeout(timer.current)}
   },[])
   useEffect(()=>{
     const intercept=(event:MouseEvent)=>{
-      if(event.defaultPrevented||event.button!==0||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey||latest.current.revision===savedRevision.current)return
+      if(event.defaultPrevented||event.button!==0||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey||(!fileOperation.current&&latest.current.revision===savedRevision.current))return
       const anchor=(event.target as Element).closest?.('a[href]') as HTMLAnchorElement|null
       if(!anchor||anchor.target==='_blank'||anchor.hasAttribute('download')||anchor.origin!==window.location.origin)return
       event.preventDefault();event.stopPropagation()
+      if(fileOperation.current){setFileError('Wait for the file operation to finish before leaving.');return}
       void flush().then(ok=>{if(ok)window.location.assign(anchor.href)})
     }
     document.addEventListener('click',intercept,true)
@@ -153,6 +175,79 @@ export default function BfcmPlanner({brand, initialDraft, initialVersion, saveAc
       }
     }catch(e){setError(e instanceof Error?e.message:'Could not complete this action.')}finally{setBusy(false)}
   }
+  function adoptFileResult(result:{version:number;draft:Draft;files:BfcmFile[]}) {
+    version.current=result.version;latest.current=result.draft;savedRevision.current=result.draft.revision
+    setDraft(result.draft);setFiles(result.files);setSaveState('saved');setConfirmed(false)
+  }
+  async function uploadFiles(selected:File[]) {
+    if(!selected.length||disabled||fileOperation.current||(!fileActions&&!fixtureFiles))return
+    fileOperation.current=true;setBusy(true);setFileError('');setFileStatus('')
+    const failures:string[]=[]
+    try {
+      if(!(await flush()))return
+      for(let index=0;index<selected.length;index++) {
+        const file=selected[index]
+        if(file.size===0||file.size>MAX_FILE_BYTES){failures.push(`${file.name}: choose a non-empty file up to 250 MB.`);continue}
+        try {
+          if(fixtureFiles) {
+            const id=crypto.randomUUID(),url=URL.createObjectURL(file)
+            const next={...latest.current,fileIds:[...(latest.current.fileIds??[]),id],revision:latest.current.revision+1}
+            if(!(await persist(next))){URL.revokeObjectURL(url);throw new Error('Could not save this fixture file.')}
+            latest.current=next;setDraft(next);setSaveState('saved')
+            fixtureUrls.current.set(id,url)
+            setFiles(previous=>[...previous,{id,name:file.name,size:file.size,contentType:file.type||'application/octet-stream',createdAt:new Date().toISOString()}])
+            continue
+          }
+          if(!fileActions)throw new Error('File uploads are unavailable.')
+          setFileProgress(`Preparing ${index+1} of ${selected.length}: ${file.name}`)
+          const prepared=await fileActions.prepare({fileName:file.name,contentType:file.type||'application/octet-stream',byteSize:file.size},version.current)
+          if(!prepared.ok)throw new Error(prepared.error)
+          setFileProgress(`Uploading ${index+1} of ${selected.length}: ${file.name}`)
+          const {createClient}=await import('@/lib/supabase/client')
+          const body=new File([file],file.name,{type:prepared.contentType})
+          const {error:uploadError}=await createClient().storage.from(prepared.bucket).uploadToSignedUrl(prepared.path,prepared.token,body,{contentType:prepared.contentType,upsert:false})
+          if(uploadError)throw new Error('Upload failed. Please try again.')
+          setFileProgress(`Saving ${index+1} of ${selected.length}: ${file.name}`)
+          const finalized=await fileActions.finalize(prepared.id,version.current)
+          if(!finalized.ok)throw new Error(finalized.error)
+          adoptFileResult(finalized)
+        }catch(cause){failures.push(`${file.name}: ${cause instanceof Error?cause.message:'Could not upload this file.'}`)}
+      }
+      setFileError(failures.join(' '))
+    }finally{fileOperation.current=false;setBusy(false);setFileProgress('');if(fileInput.current)fileInput.current.value=''}
+  }
+  async function downloadFile(file:Pick<BfcmFile,'id'|'name'>) {
+    if(busy||fileOperation.current)return
+    fileOperation.current=true;setBusy(true);setFileError('');setFileStatus('')
+    try {
+      if(!(await flush()))return
+      const result=fixtureFiles?{ok:true as const,url:fixtureUrls.current.get(file.id)??''}:await fileActions?.download(file.id)
+      if(!result?.ok||!result.url)throw new Error(result&&!result.ok?result.error:'File download is unavailable.')
+      const anchor=document.createElement('a');anchor.href=result.url;anchor.download=file.name;anchor.target='_blank';anchor.rel='noopener noreferrer';anchor.click()
+    }catch(cause){setFileError(cause instanceof Error?cause.message:'Could not download this file.')}finally{fileOperation.current=false;setBusy(false)}
+  }
+  async function removeFile(file:BfcmFile) {
+    if(disabled||fileOperation.current||!window.confirm(`Remove “${file.name}” from the current plan? Files in saved versions remain available.`))return
+    fileOperation.current=true;setBusy(true);setFileError('');setFileStatus('')
+    try {
+      if(!(await flush()))return
+      if(fixtureFiles){const next={...latest.current,fileIds:(latest.current.fileIds??[]).filter(id=>id!==file.id),revision:latest.current.revision+1};if(!(await persist(next)))throw new Error('Could not remove this fixture file.');latest.current=next;setDraft(next);setSaveState('saved');return}
+      const result=await fileActions?.remove(file.id,version.current)
+      if(!result?.ok)throw new Error(result&&!result.ok?result.error:'File removal is unavailable.')
+      adoptFileResult(result)
+    }catch(cause){setFileError(cause instanceof Error?cause.message:'Could not remove this file.')}finally{fileOperation.current=false;setBusy(false)}
+  }
+  async function clearExpiredUploads() {
+    if(disabled||fileOperation.current||!fileActions?.cleanup||!window.confirm('Clear incomplete uploads older than 130 minutes? Uploaded files and saved versions will not change.'))return
+    fileOperation.current=true;setBusy(true);setFileError('');setFileStatus('')
+    try {
+      if(!(await flush()))return
+      setFileProgress('Clearing expired uploads…')
+      const result=await fileActions.cleanup(version.current)
+      if(!result.ok)throw new Error(result.error)
+      setFileStatus(`Cleared ${result.cleaned} expired ${result.cleaned===1?'upload':'uploads'}.`)
+    }catch(cause){setFileError(cause instanceof Error?cause.message:'Could not clear expired uploads.')}finally{fileOperation.current=false;setBusy(false);setFileProgress('')}
+  }
   function review(){const errors=validateDraft(brand,latest.current);if(errors.length){setError(errors.join(' '));return}setError('');setSummary(true)}
 
   return <main lang="en" className={styles.root}><div className={styles.wrap}>
@@ -177,7 +272,8 @@ export default function BfcmPlanner({brand, initialDraft, initialVersion, saveAc
       <div className={styles.options}><label className={styles.check}><input type="checkbox" checked={draft.voiceover} disabled={disabled} onChange={e=>edit({voiceover:e.target.checked})}/>Allow voiceover</label><label className={styles.check}><input type="checkbox" checked={draft.sfx} disabled={disabled} onChange={e=>edit({sfx:e.target.checked})}/>Allow sound effects (SFX)</label></div>
     </section>}
     {summary&&<section className={styles.panel}><h2>Review plan</h2><div className={styles.summaryGrid}>{(['pre','bf'] as const).map(stage=><div key={stage} className={styles.summaryItem}><strong>{stage==='pre'?'Pre-Black Friday':'Black Friday'} · {stage==='pre'?split.pre:split.bf} creatives</strong>{draft.offers[stage].offer}<br/>{draft.offers[stage].startDate} → {draft.offers[stage].endDate}<br/>{draft.offers[stage].sitewide?'Sitewide':draft.offers[stage].included}{draft.offers[stage].hasExclusions&&<><br/>Excluding: {draft.offers[stage].exclusions}</>}</div>)}</div><div className={styles.summaryGrid}>{allocationGroups.map(group=><div key={group.label} className={styles.summaryItem}><div className={styles.allocationGroupHeader}><strong>{group.label}</strong><span aria-label={`${group.label} subtotal`}>{group.subtotal}{group.cap!==null?` / ${group.cap}`:''}</span></div>{group.categories.map(c=><div key={c.id} style={{display:'flex',justifyContent:'space-between'}}><span>{c.label}</span><span>{draft.allocation[c.id]}</span></div>)}</div>)}</div><p className={styles.subtle} style={{marginTop:16}}>30 copy lines {draft.approvedCopiesRevision===draft.copyRevision?'approved':'awaiting approval'} · {draft.motionIds.length} selected references · Voiceover {draft.voiceover?'allowed':'not allowed'} · SFX {draft.sfx?'allowed':'not allowed'}</p>{!locked&&<label className={styles.check}><input type="checkbox" checked={confirmed} disabled={busy} onChange={e=>setConfirmed(e.target.checked)}/>I confirm this plan’s offers, quantities, copy lines and references.</label>}</section>}
-    {draft.history.length>0&&<details className={styles.panel}><summary style={{cursor:'pointer',fontSize:14,fontWeight:700}}>History · {draft.history.length} {draft.history.length===1?'version':'versions'}</summary>{draft.history.map(v=><div className={styles.history} key={v.version}><div className={styles.inline}><strong>Version {v.version}</strong><span className={styles.subtle}>{new Date(v.lockedAt).toLocaleString('en-US')}</span><button className={styles.tinyButton} onClick={()=>setHistoryVersion(historyVersion===v.version?null:v.version)}>{historyVersion===v.version?'Hide':'View version'}</button></div>{historyVersion===v.version&&<div style={{marginTop:12}}><p>Pre-BF: {v.snapshot.offers.pre.offer}</p><p>BF: {v.snapshot.offers.bf.offer}</p><p className={styles.subtle}>{v.snapshot.prePercent}% Pre-BF · {v.snapshot.motionIds.length} references</p>{v.snapshot.copies.map((c,i)=><p key={c.id} className={styles.subtle}>{i+1}. {c.text}</p>)}</div>}</div>)}</details>}
+    <section className={styles.panel} aria-labelledby="bfcm-notes-files"><h2 id="bfcm-notes-files">Notes & files</h2><label className={styles.field}>Notes<textarea className={styles.textarea} aria-label="Plan notes" rows={4} maxLength={20000} value={draft.notes??''} disabled={disabled} placeholder="Add notes for this plan" onChange={event=>edit({notes:event.target.value})}/></label><div className={styles.filesHeader}><h3>Files</h3><div className={styles.inline}>{fileActions?.cleanup&&<button className={styles.tinyButton} disabled={disabled} onClick={()=>void clearExpiredUploads()}>Clear expired uploads</button>}<label className={styles.filePicker}><span>Add files</span><input ref={fileInput} type="file" multiple aria-label="Add plan files" disabled={disabled||(!fileActions&&!fixtureFiles)} onChange={event=>void uploadFiles(Array.from(event.target.files??[]))}/></label></div></div><p className={styles.subtle}>{fixtureFiles?'Fixture files are kept in this tab only and are lost on reload.':'Any file type · Up to 250 MB per file'}</p>{!fileActions&&!fixtureFiles&&<p className={styles.subtle}>File uploads are unavailable.</p>}{fileProgress&&<div className={styles.fileProgress} role="status"><progress aria-label="File upload progress"/>{fileProgress}</div>}{fileError&&<p className={styles.error} role="alert">{fileError}</p>}{fileStatus&&<p className={styles.subtle} role="status">{fileStatus}</p>}{currentFiles.length?<ul className={styles.fileList}>{currentFiles.map(file=><li key={file.id}><div className={styles.fileInfo}><span>{file.name}</span><small>{fileSize(file.size)}</small></div><div className={styles.inline}><button className={styles.tinyButton} disabled={busy} aria-label={`Download ${file.name}`} onClick={()=>void downloadFile(file)}>Download</button><button className={styles.tinyButton} disabled={disabled} aria-label={`Remove ${file.name}`} onClick={()=>void removeFile(file)}>Remove</button></div></li>)}</ul>:!fileError&&<p className={styles.subtle}>No files attached.</p>}</section>
+    {draft.history.length>0&&<details className={styles.panel}><summary style={{cursor:'pointer',fontSize:14,fontWeight:700}}>History · {draft.history.length} {draft.history.length===1?'version':'versions'}</summary>{draft.history.map(v=><div className={styles.history} key={v.version}><div className={styles.inline}><strong>Version {v.version}</strong><span className={styles.subtle}>{new Date(v.lockedAt).toLocaleString('en-US')}</span><button className={styles.tinyButton} onClick={()=>setHistoryVersion(historyVersion===v.version?null:v.version)}>{historyVersion===v.version?'Hide':'View version'}</button></div>{historyVersion===v.version&&<div style={{marginTop:12}}><p>Pre-BF: {v.snapshot.offers.pre.offer}</p><p>BF: {v.snapshot.offers.bf.offer}</p><p className={styles.subtle}>{v.snapshot.prePercent}% Pre-BF · {v.snapshot.motionIds.length} references</p>{v.snapshot.copies.map((c,i)=><p key={c.id} className={styles.subtle}>{i+1}. {c.text}</p>)}{v.snapshot.notes&&<div className={styles.historyNotes}><strong>Notes</strong><p>{v.snapshot.notes}</p></div>}{!!v.snapshot.fileIds?.length&&<div className={styles.historyNotes}><strong>Files</strong>{v.snapshot.fileIds.map((id,index)=>{const file=files.find(item=>item.id===id)??{id,name:`Attachment ${index+1}`};return <div key={id} className={styles.historyFile}><span>{file.name}</span><button className={styles.tinyButton} disabled={busy} aria-label={`Download version ${v.version} file ${file.name}`} onClick={()=>void downloadFile(file)}>Download</button></div>})}</div>}</div>}</div>)}</details>}
     <footer className={styles.footer}><div>{locked?<span className={styles.subtle}>Confirmed</span>:<button className={styles.secondary} disabled={busy||(!summary&&step===1)} onClick={()=>summary?setSummary(false):void go(step-1)}><ArrowLeft size={13} style={{display:'inline',verticalAlign:'middle'}}/> Back</button>}</div><div className={styles.inline}>{locked?<button className={styles.secondary} disabled={busy} onClick={()=>setShowReopen(true)}>Reopen plan</button>:summary?<button className={styles.primary} disabled={!confirmed||busy} onClick={()=>void transition('lock')}>{busy?'Saving…':'Confirm · BFCM plan locked'}</button>:step===2?<button className={styles.primary} disabled={busy||validateCopies(draft.copies).length>0} onClick={()=>void transition('approve')}>Confirm all 30 copy lines <Check size={14} style={{display:'inline',verticalAlign:'middle'}}/></button>:step===3?<button className={styles.primary} disabled={busy} onClick={review}>Review plan <ArrowRight size={14} style={{display:'inline',verticalAlign:'middle'}}/></button>:<button className={styles.primary} disabled={busy} onClick={()=>void go(2)}>Continue <ArrowRight size={14} style={{display:'inline',verticalAlign:'middle'}}/></button>}</div></footer>
     {showApplyOffers&&<div className={styles.modalBackdrop}><div className={styles.modal} role="dialog" data-bfcm-dialog aria-modal="true" aria-labelledby="apply-offers-title"><h2 id="apply-offers-title" style={{fontWeight:750,fontSize:20}}>Generate new unapproved copy?</h2><p className={styles.subtle} style={{margin:'16px 0'}}>Generate new copy from the website and planned offers. Only unapproved lines will be replaced, including their edits. Approved lines will remain unchanged.</p><div className={styles.inline}><button className={styles.secondary} disabled={busy} onClick={()=>setShowApplyOffers(false)}>Cancel</button><button className={styles.primary} disabled={busy} onClick={()=>void transition('apply-offers')}>Replace unapproved lines</button></div></div></div>}
     {showReopen&&<div className={styles.modalBackdrop}><div className={styles.modal} role="dialog" data-bfcm-dialog aria-modal="true" aria-labelledby="reopen-title"><h2 id="reopen-title" style={{fontWeight:750,fontSize:20}}>Reopen this plan?</h2><p className={styles.subtle} style={{margin:'16px 0'}}>The current version will remain in history. You must confirm the copy lines again before locking a new version.</p><div className={styles.inline}><button className={styles.secondary} disabled={busy} onClick={()=>setShowReopen(false)}>Cancel</button><button className={styles.primary} disabled={busy} onClick={()=>void transition('reopen')}>Yes, reopen</button></div></div></div>}
