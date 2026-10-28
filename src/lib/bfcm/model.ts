@@ -52,7 +52,7 @@ export function validateAllocation(brand: Brand, allocation: Allocation): string
 function validDate(value: string) { return /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value }
 export function validateOffers(offers: Draft['offers']): string[] {
   return (['pre', 'bf'] as const).flatMap(stage => {
-    const offer = offers[stage], label = stage === 'pre' ? 'Pré-BF' : 'Black Friday', errors: string[] = []
+    const offer = offers[stage], label = stage === 'pre' ? 'Pre-BF' : 'Black Friday', errors: string[] = []
     if (!offer.offer.trim()) errors.push(`${label}: enter the current offer.`)
     if (!validDate(offer.startDate) || !validDate(offer.endDate)) errors.push(`${label}: enter valid start and end dates.`)
     else if (offer.endDate < offer.startDate) errors.push(`${label}: end date must follow start date.`)
