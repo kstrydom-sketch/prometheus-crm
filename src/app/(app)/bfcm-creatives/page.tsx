@@ -2,8 +2,8 @@ import Link from 'next/link'
 import BfcmAddProject from '@/components/bfcm/BfcmAddProject'
 import { parsePlanConfig } from '@/lib/bfcm/content'
 import { listStaffPlans, listBfcmBrandOptions } from '@/lib/bfcm/server'
-import { productionSummary } from '@/lib/bfcm/production'
-import { loadAllProductionSteps } from '@/lib/bfcm/production-server'
+import { productionSummary, type TaskNode } from '@/lib/bfcm/production'
+import { loadAllProductionTrees } from '@/lib/bfcm/production-server'
 import { easternToday } from '@/lib/eastern'
 
 const normalizedName = (name: string) => name.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '')
@@ -11,7 +11,7 @@ const normalizedName = (name: string) => name.normalize('NFKD').replace(/[\u0300
 export const dynamic = 'force-dynamic'
 export default async function BfcmCreativesPage() {
   const [{ plans, unavailable }, options] = await Promise.all([listStaffPlans(), listBfcmBrandOptions()])
-  const allSteps = unavailable ? [] : await loadAllProductionSteps()
+  const trees = unavailable ? new Map<string, TaskNode[]>() : await loadAllProductionTrees()
   const today = easternToday()
   const configured = plans.flatMap(plan => { const config = parsePlanConfig(plan.config, plan.slug); return config ? [{ plan, brand: config.brand }] : [] })
   return <main style={{ padding: '40px clamp(20px,4vw,64px)', maxWidth: 1400, margin: 'auto' }}>
@@ -22,7 +22,7 @@ export default async function BfcmCreativesPage() {
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(260px,1fr))', gap: 20 }}>
       {configured.map(({ brand, plan }) => {
         const locked = (plan?.state as { status?: string } | null)?.status === 'locked'
-        const production = productionSummary(allSteps.filter(s => s.plan_slug === plan.slug))
+        const production = productionSummary(trees.get(plan.slug) ?? [])
         return <Link key={brand.slug} href={`/bfcm-creatives/${brand.slug}`} className="card" style={{ display: 'block', padding: 26, textDecoration: 'none', color: 'var(--text-primary)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}><span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{locked ? 'Plan locked' : plan?.version ? 'In progress' : 'Onboarding not started yet'}</span><span aria-hidden="true">↗</span></div>
           <h2 style={{ fontSize: 22, fontWeight: 700, margin: '24px 0' }}>{brand.name}</h2>
