@@ -3,7 +3,7 @@ import { useState, useSyncExternalStore } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import type { Calibration, CalibrationFeedback, CalibrationItem } from '@/lib/bfcm/production-server'
-import { attachCalibrationItem, createCalibrationUploadUrl, reopenCalibration, removeCalibrationItem, sendCalibration, startCalibration } from '@/lib/bfcm/calibration-actions'
+import { attachCalibrationItem, copyCalibrationDriveFile, createCalibrationUploadUrl, reopenCalibration, removeCalibrationItem, sendCalibration, startCalibration, syncCalibrationFolder } from '@/lib/bfcm/calibration-actions'
 import s from './BfcmProduction.module.css'
 
 const BUCKET = 'project-images'
@@ -29,6 +29,8 @@ export default function BfcmCalibrationStaff({ slug, data, revisions }: Props) {
   const [errors, setErrors] = useState<string[]>([])
   const [over, setOver] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [synced, setSynced] = useState('')
+  const [folder, setFolder] = useState(data?.calibration?.drive_folder_url ?? '')
   const origin = useOrigin()
 
   async function act(label: string, action: () => Promise<{ ok: boolean; error?: string }>) {
@@ -37,6 +39,23 @@ export default function BfcmCalibrationStaff({ slug, data, revisions }: Props) {
     if (!result.ok) setErrors([result.error ?? 'Something went wrong.'])
     router.refresh()
     setBusy(null)
+  }
+  // Same as a Moments project: the team pastes their Drive folder, the CRM copies what's in it.
+  // Files are copied one per request so a folder of large videos never times out.
+  async function syncDrive(folderUrl: string) {
+    setBusy('Reading the Drive folder…'); setErrors([]); setSynced('')
+    const plan = await syncCalibrationFolder(slug, folderUrl)
+    if (!plan.ok) { setErrors([plan.error]); setBusy(null); router.refresh(); return }
+    const failed: string[] = plan.unsupported.map(n => `${n}: not an image or video, skipped.`)
+    let copied = 0
+    for (const [i, file] of plan.files.entries()) {
+      setBusy(`Copying ${i + 1} of ${plan.files.length} from Drive: ${file.name}`)
+      const result = await copyCalibrationDriveFile(slug, file.id)
+      if (result.ok) copied++; else failed.push(result.error)
+    }
+    setSynced(plan.files.length === 0 ? `Up to date: ${plan.unchanged} sample${plan.unchanged === 1 ? '' : 's'} already copied.` : `Copied ${copied} of ${plan.files.length} from Drive.${plan.unchanged ? ` ${plan.unchanged} already up to date.` : ''}`)
+    setErrors(failed); setBusy(null)
+    router.refresh()
   }
   async function upload(files: File[]) {
     const failed: string[] = []
@@ -93,9 +112,14 @@ export default function BfcmCalibrationStaff({ slug, data, revisions }: Props) {
       <button className="btn-secondary btn-sm" onClick={() => { void navigator.clipboard.writeText(link).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500) }) }}>{copied ? 'Copied' : 'Copy link'}</button>
     </div>
     {calibration.client_note && <div><p className={s.panelTitle}>Client’s overall note</p><p className={s.commentBody} style={{ margin: 0 }}>{calibration.client_note}</p></div>}
+    {!locked && <form className={s.inline} onSubmit={e => { e.preventDefault(); if (folder.trim() && !busy) void syncDrive(folder) }}>
+      <input className={s.linkField} value={folder} onChange={e => setFolder(e.target.value)} placeholder="Paste the Drive folder with the samples" aria-label="Samples Drive folder" disabled={!!busy} />
+      <button className="btn-primary btn-sm" disabled={!!busy || !folder.trim()}>{calibration.drive_folder_url ? 'Sync again' : 'Sync from Drive'}</button>
+    </form>}
+    {!locked && (busy?.startsWith('Copying') || busy?.startsWith('Reading') || synced) && <p className={s.muted} style={{ margin: 0 }}>{busy?.startsWith('Copying') || busy?.startsWith('Reading') ? busy : synced}</p>}
     {!locked && <label className={s.drop} data-over={over} onDragOver={e => { e.preventDefault(); setOver(true) }} onDragLeave={() => setOver(false)} onDrop={e => { e.preventDefault(); setOver(false); if (!busy) void upload([...e.dataTransfer.files]) }}>
       <input type="file" multiple accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/quicktime,video/webm,.mov,.m4v" hidden disabled={!!busy} onChange={e => { const files = [...(e.target.files ?? [])]; e.target.value = ''; if (files.length) void upload(files) }} />
-      {busy?.startsWith('Uploading') ? busy : 'Drop samples here, or click to choose. Images up to 50MB, videos up to 250MB.'}
+      {busy?.startsWith('Uploading') ? busy : 'Or drop single files here. Images up to 50MB, videos up to 250MB.'}
     </label>}
     {items.length > 0 && <div className={s.grid}>{items.map(item => {
       const notes = feedback.filter(f => f.item_id === item.id)

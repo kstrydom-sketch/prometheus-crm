@@ -4,14 +4,14 @@ import { getCachedUser } from '@/lib/supabase/server'
 import { getCachedProfiles } from '@/lib/profiles'
 import { canEdit } from '@/lib/permissions'
 import { buildTaskTree, type Person, type ProductionStep, type TaskNode } from './production'
+import { CALIBRATION_BUCKET } from './calibration-drive'
 
 const STEP_COLUMNS = 'id,plan_slug,parent_id,sort_order,kind,title,plan_key,due_date,status'
-export const CALIBRATION_BUCKET = 'project-images'
 
 export type BfcmComment = { id: string; step_id: string | null; author_id: string | null; author_name: string; body: string; created_at: string }
 export type CalibrationItem = { id: string; name: string; media_type: 'image' | 'video'; url: string; sort_order: number; client_status: string; created_at: string }
 export type CalibrationFeedback = { id: string; item_id: string; author_name: string; body: string; pin_x: number | null; pin_y: number | null; created_at: string }
-export type Calibration = { plan_slug: string; share_token: string; status: string; sent_at: string | null; submitted_at: string | null; submitted_by_name: string | null; client_note: string | null }
+export type Calibration = { plan_slug: string; share_token: string; status: string; drive_folder_url: string | null; sent_at: string | null; submitted_at: string | null; submitted_by_name: string | null; client_note: string | null }
 export type BrandContract = { id: string; brand_id: string; document_id: string | null; file_name: string | null; title: string; signed_on: string | null; deliverables: string; revisions: string; special_terms: string; updated_by_name: string | null; updated_at: string }
 
 /** Teammates who can be assigned or @mentioned: everyone with CRM access. */
@@ -62,7 +62,7 @@ export async function loadAllProductionTrees(): Promise<Map<string, TaskNode[]>>
 
 export async function loadCalibration(slug: string): Promise<{ calibration: Calibration | null; items: CalibrationItem[]; feedback: CalibrationFeedback[] } | null> {
   const db = createServiceClient()
-  const cal = await db.from('bfcm_calibrations').select('plan_slug,share_token,status,sent_at,submitted_at,submitted_by_name,client_note').eq('plan_slug', slug).maybeSingle()
+  const cal = await db.from('bfcm_calibrations').select('plan_slug,share_token,status,sent_at,submitted_at,submitted_by_name,client_note,drive_folder_url').eq('plan_slug', slug).maybeSingle()
   if (cal.error) return null
   if (!cal.data) return { calibration: null, items: [], feedback: [] }
   return { calibration: cal.data as Calibration, ...await loadCalibrationItems(slug) }

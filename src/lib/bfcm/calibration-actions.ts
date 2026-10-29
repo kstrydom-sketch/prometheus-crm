@@ -4,12 +4,11 @@ import { randomBytes, randomUUID } from 'node:crypto'
 import { revalidatePath } from 'next/cache'
 import { createServiceClient } from '@/lib/supabase/service'
 import { createNotifications } from '@/lib/notifications'
-import { MAX_VIDEO_BYTES, VIDEO_TYPES } from '@/lib/creative-media'
-import { CALIBRATION_BUCKET, requireStaffProfile } from './production-server'
+import { downloadDriveFile, extractDriveFolderId, listDriveFolder } from '@/lib/drive'
+import { requireStaffProfile } from './production-server'
+import { CALIBRATION_BUCKET, MAX_SAMPLE_IMAGE_BYTES, MAX_SAMPLE_VIDEO_BYTES, copyDriveSample, planDriveSync, sampleExtension, sampleKind } from './calibration-drive'
 
 type Result = { ok: true } | { ok: false; error: string }
-const IMAGE_TYPES: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif' }
-const MAX_IMAGE_BYTES = 50 * 1024 * 1024
 const validSlug = (slug: unknown): slug is string => typeof slug === 'string' && /^[a-z0-9][a-z0-9-]{0,99}$/.test(slug)
 const validId = (id: unknown): id is string => typeof id === 'string' && /^[0-9a-f-]{36}$/.test(id)
 const validToken = (token: unknown): token is string => typeof token === 'string' && /^[a-f0-9]{64}$/.test(token)
@@ -68,9 +67,9 @@ export async function createCalibrationUploadUrl(slug: string, contentType: stri
     const cal = await calibrationOf(slug)
     if (!cal) return { ok: false, error: 'Start calibration first.' }
     if (cal.status === 'submitted') return { ok: false, error: 'The client already submitted feedback. Reopen the round to change samples.' }
-    const ext = IMAGE_TYPES[contentType] ?? VIDEO_TYPES[contentType]
+    const ext = sampleExtension(contentType)
     if (!ext) return { ok: false, error: 'Samples can be JPG, PNG, WebP, GIF, MP4, MOV or WebM.' }
-    const limit = IMAGE_TYPES[contentType] ? MAX_IMAGE_BYTES : MAX_VIDEO_BYTES
+    const limit = sampleKind(contentType) === 'image' ? MAX_SAMPLE_IMAGE_BYTES : MAX_SAMPLE_VIDEO_BYTES
     if (!Number.isFinite(byteSize) || byteSize <= 0 || byteSize > limit) return { ok: false, error: `Files can be up to ${limit / 1048576}MB.` }
     const { data, error } = await createServiceClient().storage.from(CALIBRATION_BUCKET).createSignedUploadUrl(`${folder(slug)}${randomUUID()}.${ext}`)
     if (error || !data) return { ok: false, error: 'Unable to start the upload.' }
@@ -87,7 +86,7 @@ export async function attachCalibrationItem(slug: string, path: string, name: st
     if (!cal || cal.status === 'submitted') return { ok: false, error: 'This round can’t take new samples.' }
     const file = typeof path === 'string' && path.startsWith(folder(slug)) ? path.slice(folder(slug).length) : ''
     if (!/^[0-9a-f-]{36}\.[a-z0-9]{2,4}$/.test(file)) return { ok: false, error: 'That upload does not belong to this brand.' }
-    const mediaType = IMAGE_TYPES[contentType] ? 'image' : VIDEO_TYPES[contentType] ? 'video' : null
+    const mediaType = sampleKind(contentType)
     if (!mediaType) return { ok: false, error: 'That file type is not accepted.' }
     const db = createServiceClient()
     const { data: listed } = await db.storage.from(CALIBRATION_BUCKET).list(folder(slug).slice(0, -1), { search: file })
@@ -110,6 +109,57 @@ export async function removeCalibrationItem(slug: string, id: string): Promise<R
     const { data } = await db.from('bfcm_calibration_items').delete().eq('id', id).eq('plan_slug', slug).select('storage_path')
     if (data?.[0]) await db.storage.from(CALIBRATION_BUCKET).remove([data[0].storage_path as string])
     refresh(slug, cal.share_token)
+    return { ok: true }
+  })
+}
+
+/**
+ * Saves the team's Drive folder and works out what to copy: new files, and files
+ * edited since they were copied. The browser then copies them one at a time with
+ * copyCalibrationDriveFile, so a folder of large videos never hits one request's time limit.
+ */
+export async function syncCalibrationFolder(slug: string, folderUrl: string): Promise<{ ok: true; files: { id: string; name: string }[]; unchanged: number; unsupported: string[] } | { ok: false; error: string }> {
+  let out: { ok: true; files: { id: string; name: string }[]; unchanged: number; unsupported: string[] } | null = null
+  const result = await staff(slug, async () => {
+    const cal = await calibrationOf(slug)
+    if (!cal) return { ok: false, error: 'Start calibration first.' }
+    if (cal.status === 'submitted') return { ok: false, error: 'The client already submitted feedback. Reopen the round to change samples.' }
+    const url = typeof folderUrl === 'string' ? folderUrl.trim() : ''
+    let folderId: string
+    try { folderId = extractDriveFolderId(url) } catch { return { ok: false, error: 'Paste a Drive folder link (drive.google.com/drive/folders/…).' } }
+    if (url.length > 500) return { ok: false, error: 'That link is too long.' }
+    let listed
+    try { listed = await listDriveFolder(folderId) } catch (e) {
+      console.error('[bfcm calibration drive]', e)
+      return { ok: false, error: 'Couldn’t open that folder. Check the link, and that the folder is shared with the CRM’s Drive account like Moments folders are.' }
+    }
+    const db = createServiceClient()
+    await db.from('bfcm_calibrations').update({ drive_folder_url: url }).eq('plan_slug', slug)
+    if (!listed.length) { refresh(slug); return { ok: false, error: 'That folder has no images or videos we can see. Nothing was changed: check the link and that the folder is shared with the CRM.' } }
+    const { data: existing } = await db.from('bfcm_calibration_items').select('id,drive_file_id,drive_modified_at').eq('plan_slug', slug)
+    const plan = planDriveSync(listed, existing ?? [])
+    out = { ok: true, files: [...plan.add, ...plan.refresh.map(r => r.file)].map(f => ({ id: f.id, name: f.name })), unchanged: plan.unchanged, unsupported: plan.unsupported }
+    refresh(slug)
+    return { ok: true }
+  })
+  return result.ok && out ? out : result as { ok: false; error: string }
+}
+
+/** Copies one file from the saved folder (re-listed here, so only files really in that folder can be copied). */
+export async function copyCalibrationDriveFile(slug: string, fileId: string): Promise<Result> {
+  return staff(slug, async me => {
+    if (typeof fileId !== 'string' || !/^[A-Za-z0-9_-]{10,200}$/.test(fileId)) return { ok: false, error: 'Invalid file.' }
+    const db = createServiceClient()
+    const { data: cal } = await db.from('bfcm_calibrations').select('status,share_token,drive_folder_url').eq('plan_slug', slug).maybeSingle()
+    if (!cal?.drive_folder_url) return { ok: false, error: 'Sync the folder first.' }
+    if (cal.status === 'submitted') return { ok: false, error: 'The client already submitted feedback.' }
+    const file = (await listDriveFolder(extractDriveFolderId(cal.drive_folder_url))).find(f => f.id === fileId)
+    if (!file) return { ok: false, error: 'That file is no longer in the folder.' }
+    const { data: existing } = await db.from('bfcm_calibration_items').select('id,drive_file_id,drive_modified_at').eq('plan_slug', slug).eq('drive_file_id', fileId).maybeSingle()
+    if (existing && existing.drive_modified_at === (file.modifiedTime ?? null)) return { ok: true }
+    const copied = await copyDriveSample(db, slug, file, existing?.id ?? null, downloadDriveFile, me.id)
+    if (!copied.ok) return { ok: false, error: copied.message }
+    refresh(slug, cal.share_token as string)
     return { ok: true }
   })
 }
