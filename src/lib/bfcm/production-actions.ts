@@ -2,40 +2,105 @@
 
 import { revalidatePath } from 'next/cache'
 import { createServiceClient } from '@/lib/supabase/service'
-import { getCachedProfiles } from '@/lib/profiles'
-import { requireBfcmEditor } from './server'
-import { DEFAULT_STEPS, STEP_STATUSES } from './production'
+import { createNotifications } from '@/lib/notifications'
+import { loadPlan } from './server'
+import { loadPeople, requireStaffProfile } from './production-server'
+import { DEFAULT_STEPS, isStepStatus, mentionedIds, planSplitFor } from './production'
 
 type Result = { ok: true } | { ok: false; error: string }
-const validSlug = (slug: string) => /^[a-z0-9][a-z0-9-]{0,99}$/.test(slug)
-const validId = (id: string) => /^[0-9a-f-]{36}$/.test(id)
+const validSlug = (slug: string) => typeof slug === 'string' && /^[a-z0-9][a-z0-9-]{0,99}$/.test(slug)
+const validId = (id: unknown): id is string => typeof id === 'string' && /^[0-9a-f-]{36}$/.test(id)
+const cleanTitle = (title: unknown) => typeof title === 'string' ? title.replace(/\s+/g, ' ').trim() : ''
 
 function done(slug: string): Result {
   revalidatePath('/bfcm-creatives')
   revalidatePath(`/bfcm-creatives/${slug}`)
   return { ok: true }
 }
-
-/** Adds any default step this plan doesn't have yet. Existing steps are left alone. */
-export async function setupProductionSteps(slug: string): Promise<Result> {
+/** Every action: an editor, a valid plan, and a readable error instead of a thrown one. */
+async function run(slug: string, body: (me: { id: string | null; name: string }) => Promise<Result>): Promise<Result> {
   try {
-    const user = await requireBfcmEditor()
+    const me = await requireStaffProfile()
     if (!validSlug(slug)) return { ok: false, error: 'Invalid plan.' }
-    const rows = DEFAULT_STEPS.map(step => ({ ...step, plan_slug: slug, updated_by: user.id }))
-    const { error } = await createServiceClient().from('bfcm_production_steps').upsert(rows, { onConflict: 'plan_slug,kind', ignoreDuplicates: true })
-    return error ? { ok: false, error: 'Unable to add the steps.' } : done(slug)
-  } catch { return { ok: false, error: 'Access is unauthorized or unavailable.' } }
+    return await body(me)
+  } catch (error) {
+    console.error('[bfcm production]', error)
+    return { ok: false, error: error instanceof Error && error.message === 'Unauthorized access.' ? 'You need CRM access to do that.' : 'Something went wrong. Reload and try again.' }
+  }
+}
+async function stepOf(slug: string, id: string) {
+  const { data } = await createServiceClient().from('bfcm_production_steps').select('id,kind,parent_id,title').eq('id', id).eq('plan_slug', slug).maybeSingle()
+  return data as { id: string; kind: string; parent_id: string | null; title: string } | null
+}
+async function planContext(slug: string) {
+  const { data } = await createServiceClient().from('bfcm_plans').select('brand_id,config').eq('slug', slug).maybeSingle()
+  const brandName = (data?.config as { brand?: { name?: string } } | null)?.brand?.name ?? slug
+  return { brandId: (data?.brand_id as string | null) ?? null, brandName }
+}
+async function nextSortOrder(slug: string, parentId: string | null) {
+  const db = createServiceClient()
+  const query = db.from('bfcm_production_steps').select('sort_order').eq('plan_slug', slug).order('sort_order', { ascending: false }).limit(1)
+  const { data } = await (parentId ? query.eq('parent_id', parentId) : query.is('parent_id', null))
+  return ((data?.[0]?.sort_order as number | undefined) ?? 0) + 1
 }
 
-export async function updateProductionStep(slug: string, id: string, patch: { owner_id?: string | null; due_date?: string | null; status?: string }): Promise<Result> {
-  try {
-    const user = await requireBfcmEditor()
-    if (!validSlug(slug) || !validId(id)) return { ok: false, error: 'Invalid step.' }
+/** Adds any default task this brand doesn't have yet. Existing tasks are left alone. */
+export async function setupProductionSteps(slug: string): Promise<Result> {
+  return run(slug, async me => {
+    const db = createServiceClient()
+    const { data, error } = await db.from('bfcm_production_steps').select('kind').eq('plan_slug', slug).is('parent_id', null)
+    if (error) return { ok: false, error: 'Unable to add the tasks.' }
+    const have = new Set((data ?? []).map(r => r.kind))
+    const rows = DEFAULT_STEPS.filter(s => !have.has(s.kind)).map(s => ({ ...s, plan_slug: slug, updated_by: me.id }))
+    if (rows.length && (await db.from('bfcm_production_steps').insert(rows)).error) return { ok: false, error: 'Unable to add the tasks.' }
+    return done(slug)
+  })
+}
+
+export async function addTask(slug: string, parentId: string | null, title: string): Promise<Result> {
+  return run(slug, async me => {
+    const clean = cleanTitle(title)
+    if (!clean || clean.length > 120) return { ok: false, error: 'Give the task a name (up to 120 characters).' }
+    if (parentId !== null) {
+      const parent = validId(parentId) ? await stepOf(slug, parentId) : null
+      if (!parent) return { ok: false, error: 'That task no longer exists.' }
+      if (parent.parent_id) return { ok: false, error: 'Subtasks can’t have their own subtasks.' }
+    }
+    const { error } = await createServiceClient().from('bfcm_production_steps').insert({
+      plan_slug: slug, parent_id: parentId, kind: 'task', title: clean, sort_order: await nextSortOrder(slug, parentId), updated_by: me.id,
+    })
+    return error ? { ok: false, error: 'Unable to add the task.' } : done(slug)
+  })
+}
+
+/** Makes one subtask per category and phase from the plan's split. Re-running only adds what's missing. */
+export async function splitTaskByPlan(slug: string, stepId: string): Promise<Result> {
+  return run(slug, async me => {
+    const step = validId(stepId) ? await stepOf(slug, stepId) : null
+    if (!step || step.parent_id) return { ok: false, error: 'That task no longer exists.' }
+    const { draft } = await loadPlan(slug)
+    const split = planSplitFor(step.kind, draft)
+    if (!split.length) return { ok: false, error: 'The plan has nothing to split for this task yet.' }
+    const db = createServiceClient()
+    const { data } = await db.from('bfcm_production_steps').select('plan_key').eq('parent_id', step.id)
+    const have = new Set((data ?? []).map(r => r.plan_key))
+    let order = await nextSortOrder(slug, step.id)
+    const rows = split.filter(s => !have.has(s.plan_key)).map(s => ({ plan_slug: slug, parent_id: step.id, kind: 'task', title: s.title, plan_key: s.plan_key, sort_order: order++, updated_by: me.id }))
+    if (rows.length && (await db.from('bfcm_production_steps').insert(rows)).error) return { ok: false, error: 'Unable to split the task.' }
+    return done(slug)
+  })
+}
+
+export async function updateTask(slug: string, id: string, patch: { title?: string; due_date?: string | null; status?: string }): Promise<Result> {
+  return run(slug, async me => {
+    const step = validId(id) ? await stepOf(slug, id) : null
+    if (!step) return { ok: false, error: 'That task no longer exists.' }
+    const db = createServiceClient()
     const update: Record<string, string | null> = {}
-    if ('owner_id' in patch) {
-      const owner = patch.owner_id ?? null
-      if (owner !== null && !(await getCachedProfiles()).some(p => p.id === owner && p.can_edit)) return { ok: false, error: 'Unknown person.' }
-      update.owner_id = owner
+    if ('title' in patch) {
+      const clean = cleanTitle(patch.title)
+      if (!clean || clean.length > 120) return { ok: false, error: 'Give the task a name (up to 120 characters).' }
+      update.title = clean
     }
     if ('due_date' in patch) {
       const due = patch.due_date || null
@@ -43,23 +108,84 @@ export async function updateProductionStep(slug: string, id: string, patch: { ow
       update.due_date = due
     }
     if ('status' in patch) {
-      if (!STEP_STATUSES.some(s => s.id === patch.status)) return { ok: false, error: 'Invalid status.' }
-      update.status = patch.status!
+      if (!isStepStatus(patch.status)) return { ok: false, error: 'Invalid status.' }
+      const { count } = await db.from('bfcm_production_steps').select('id', { count: 'exact', head: true }).eq('parent_id', step.id)
+      if (count) return { ok: false, error: 'This task’s status follows its subtasks.' }
+      update.status = patch.status
     }
     if (!Object.keys(update).length) return { ok: true }
-    const { data, error } = await createServiceClient().from('bfcm_production_steps')
-      .update({ ...update, updated_at: new Date().toISOString(), updated_by: user.id })
-      .eq('id', id).eq('plan_slug', slug).select('id')
-    if (error || !data?.length) return { ok: false, error: 'Unable to save. Reload and try again.' }
-    return done(slug)
-  } catch { return { ok: false, error: 'Access is unauthorized or unavailable.' } }
+    const { error } = await db.from('bfcm_production_steps').update({ ...update, updated_at: new Date().toISOString(), updated_by: me.id }).eq('id', step.id)
+    return error ? { ok: false, error: 'Unable to save. Reload and try again.' } : done(slug)
+  })
 }
 
-export async function deleteProductionStep(slug: string, id: string): Promise<Result> {
-  try {
-    await requireBfcmEditor()
-    if (!validSlug(slug) || !validId(id)) return { ok: false, error: 'Invalid step.' }
-    const { error } = await createServiceClient().from('bfcm_production_steps').delete().eq('id', id).eq('plan_slug', slug)
-    return error ? { ok: false, error: 'Unable to remove the step.' } : done(slug)
-  } catch { return { ok: false, error: 'Access is unauthorized or unavailable.' } }
+/** Sets the full list of people on a task. Newly added people get a notification. */
+export async function setTaskAssignees(slug: string, id: string, profileIds: string[]): Promise<Result> {
+  return run(slug, async me => {
+    const step = validId(id) ? await stepOf(slug, id) : null
+    if (!step) return { ok: false, error: 'That task no longer exists.' }
+    if (!Array.isArray(profileIds) || profileIds.length > 20 || !profileIds.every(validId)) return { ok: false, error: 'Invalid people.' }
+    const people = await loadPeople()
+    const wanted = [...new Set(profileIds)]
+    if (wanted.some(pid => !people.some(p => p.id === pid))) return { ok: false, error: 'Unknown person.' }
+    const db = createServiceClient()
+    const { data: current, error } = await db.from('bfcm_step_assignees').select('profile_id').eq('step_id', step.id)
+    if (error) return { ok: false, error: 'Unable to save. Reload and try again.' }
+    const had = new Set((current ?? []).map(r => r.profile_id as string))
+    const added = wanted.filter(pid => !had.has(pid))
+    const removed = [...had].filter(pid => !wanted.includes(pid))
+    if (added.length && (await db.from('bfcm_step_assignees').insert(added.map(profile_id => ({ step_id: step.id, profile_id })))).error) return { ok: false, error: 'Unable to save. Reload and try again.' }
+    if (removed.length && (await db.from('bfcm_step_assignees').delete().eq('step_id', step.id).in('profile_id', removed)).error) return { ok: false, error: 'Unable to save. Reload and try again.' }
+    const recipients = added.filter(pid => pid !== me.id)
+    if (recipients.length) {
+      const { brandId, brandName } = await planContext(slug)
+      await createNotifications(recipients.map(recipient_id => ({
+        recipient_id, actor_id: me.id, actor_label: me.name, type: 'assigned' as const, brand_id: brandId,
+        title: `${me.name} assigned you to a BFCM task`, body: `${brandName}: ${step.title}`, link: `/bfcm-creatives/${slug}#task-${step.id}`,
+      })))
+    }
+    return done(slug)
+  })
+}
+
+export async function deleteTask(slug: string, id: string): Promise<Result> {
+  return run(slug, async () => {
+    const step = validId(id) ? await stepOf(slug, id) : null
+    if (!step) return done(slug)
+    const { error } = await createServiceClient().from('bfcm_production_steps').delete().eq('id', step.id)
+    return error ? { ok: false, error: 'Unable to remove the task.' } : done(slug)
+  })
+}
+
+/** Internal comment on a task, or on the whole brand when stepId is null. @mentions notify. */
+export async function addComment(slug: string, stepId: string | null, body: string): Promise<Result> {
+  return run(slug, async me => {
+    const text = typeof body === 'string' ? body.trim() : ''
+    if (!text || text.length > 5000) return { ok: false, error: 'Write a comment (up to 5,000 characters).' }
+    const step = stepId === null ? null : validId(stepId) ? await stepOf(slug, stepId) : null
+    if (stepId !== null && !step) return { ok: false, error: 'That task no longer exists.' }
+    const { data, error } = await createServiceClient().from('bfcm_comments')
+      .insert({ plan_slug: slug, step_id: step?.id ?? null, author_id: me.id, author_name: me.name, body: text }).select('id').single()
+    if (error) return { ok: false, error: 'Unable to post the comment.' }
+    const recipients = mentionedIds(text, await loadPeople()).filter(pid => pid !== me.id)
+    if (recipients.length) {
+      const { brandId, brandName } = await planContext(slug)
+      await createNotifications(recipients.map(recipient_id => ({
+        recipient_id, actor_id: me.id, actor_label: me.name, type: 'mentioned' as const, brand_id: brandId, comment_id: data.id,
+        title: `${me.name} mentioned you`, body: `${brandName}${step ? ` · ${step.title}` : ''}: ${text.slice(0, 140)}`,
+        link: `/bfcm-creatives/${slug}${step ? `#task-${step.id}` : '#team-thread'}`,
+      })))
+    }
+    return done(slug)
+  })
+}
+
+/** Only the author can remove their own comment. */
+export async function deleteComment(slug: string, id: string): Promise<Result> {
+  return run(slug, async me => {
+    if (!validId(id) || !me.id) return { ok: false, error: 'Invalid comment.' }
+    const { data, error } = await createServiceClient().from('bfcm_comments').delete().eq('id', id).eq('plan_slug', slug).eq('author_id', me.id).select('id')
+    if (error) return { ok: false, error: 'Unable to remove the comment.' }
+    return data?.length ? done(slug) : { ok: false, error: 'You can only remove your own comments.' }
+  })
 }

@@ -9,6 +9,7 @@ import PipelineTable from '@/components/PipelineTable'
 import OverdueProjectsPanel from '@/components/OverdueProjectsPanel'
 import MyAssignmentsPanel from '@/components/MyAssignmentsPanel'
 import DashboardTabs from '@/components/DashboardTabs'
+import { loadMyBfcmTasks } from '@/lib/bfcm/production-server'
 
 type DashboardBrand = { id: string; monthly_retainer: number | null; is_active: boolean }
 type PipelineProject = Project & { brands: { id: string; name: string } }
@@ -45,6 +46,7 @@ export default async function DashboardPage() {
   const myProfile = profiles.find(p => p.email === user?.email?.toLowerCase()) ?? null
   const myProfileId = myProfile?.id ?? null
   const editorOnly = isJobEditor(myProfile)
+  const myBfcmTasks = myProfileId ? await loadMyBfcmTasks(myProfileId) : []
 
   const activeClients = allBrands.filter(b => (b.monthly_retainer ?? 0) > 0 && b.is_active)
   const mrr = activeClients.reduce((sum, b) => sum + (b.monthly_retainer ?? 0), 0)
@@ -116,7 +118,7 @@ export default async function DashboardPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
           <OverdueProjectsPanel projects={projectsWithBrand} />
           {myProfileId && (
-            <MyAssignmentsPanel projects={pipeline} profileId={myProfileId} />
+            <MyAssignmentsPanel projects={pipeline} profileId={myProfileId} bfcmTasks={myBfcmTasks} />
           )}
         </div>
       </div>
