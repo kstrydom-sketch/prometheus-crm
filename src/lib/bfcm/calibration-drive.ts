@@ -16,9 +16,19 @@ export const MAX_SAMPLE_IMAGE_BYTES = 50 * 1024 * 1024
 // Same ceiling as Moments videos (MAX_VIDEO_BYTES): the storage project's per-object limit.
 export const MAX_SAMPLE_VIDEO_BYTES = 250 * 1024 * 1024
 
-export type DriveListing = { id: string; name: string; mimeType: string; modifiedTime?: string }
+export type CalibrationTrack = 'statics' | 'motion'
+export type DriveListing = { id: string; name: string; mimeType: string; modifiedTime?: string; folderPath?: string[] }
 export type DriveFetcher = (fileId: string, maxBytes: number) => Promise<{ ok: true; bytes: Buffer; mimeType: string } | { ok: false; reason: 'too_large' | 'error'; message: string }>
 type Existing = { id: string; drive_file_id: string | null; drive_modified_at: string | null }
+
+const folderTrack = (name: string): CalibrationTrack | null => /motion|video/i.test(name) ? 'motion' : /static|image/i.test(name) ? 'statics' : null
+/** Only folders named for a track are read, so pasting too high up can't pull in "00 Assets" or "03 Final". */
+export const isTrackFolder = (name: string) => folderTrack(name) !== null
+/** The Drive folder decides the track; a file directly in the pasted folder goes by its type. */
+export function sampleTrack(file: Pick<DriveListing, 'mimeType' | 'folderPath'>): CalibrationTrack {
+  for (const name of file.folderPath ?? []) { const track = folderTrack(name); if (track) return track }
+  return file.mimeType.startsWith('video/') ? 'motion' : 'statics'
+}
 
 export const sampleExtension = (mime: string) => SAMPLE_IMAGE_TYPES[mime] ?? SAMPLE_VIDEO_TYPES[mime] ?? null
 export const sampleKind = (mime: string): 'image' | 'video' | null => SAMPLE_IMAGE_TYPES[mime] ? 'image' : SAMPLE_VIDEO_TYPES[mime] ? 'video' : null
@@ -61,7 +71,7 @@ export async function copyDriveSample(
     const { data: old } = await db.from('bfcm_calibration_items').select('storage_path').eq('id', itemId).eq('plan_slug', slug).maybeSingle()
     // A changed file needs a fresh look from the client, so its verdict resets; its notes stay.
     const { error } = await db.from('bfcm_calibration_items')
-      .update({ storage_path: path, media_type: kind, name: sampleName(file.name), drive_modified_at: file.modifiedTime ?? null, client_status: 'pending' })
+      .update({ storage_path: path, media_type: kind, track: sampleTrack(file), name: sampleName(file.name), drive_modified_at: file.modifiedTime ?? null, client_status: 'pending' })
       .eq('id', itemId).eq('plan_slug', slug)
     if (error) { await db.storage.from(CALIBRATION_BUCKET).remove([path]); return { ok: false, message: `${file.name}: couldn’t update the sample.` } }
     if (old?.storage_path) await db.storage.from(CALIBRATION_BUCKET).remove([old.storage_path as string])
@@ -70,7 +80,7 @@ export async function copyDriveSample(
 
   const { data: last } = await db.from('bfcm_calibration_items').select('sort_order').eq('plan_slug', slug).order('sort_order', { ascending: false }).limit(1)
   const { error } = await db.from('bfcm_calibration_items').insert({
-    plan_slug: slug, storage_path: path, name: sampleName(file.name), media_type: kind,
+    plan_slug: slug, storage_path: path, name: sampleName(file.name), media_type: kind, track: sampleTrack(file),
     sort_order: ((last?.[0]?.sort_order as number | undefined) ?? 0) + 1,
     drive_file_id: file.id, drive_modified_at: file.modifiedTime ?? null, uploaded_by: uploadedBy,
   })

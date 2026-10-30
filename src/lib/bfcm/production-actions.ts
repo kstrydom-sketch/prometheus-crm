@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createServiceClient } from '@/lib/supabase/service'
 import { createNotifications } from '@/lib/notifications'
 import { loadPlan } from './server'
-import { loadPeople, requireStaffProfile } from './production-server'
+import { ensureCalibrationSubtasks, loadPeople, requireStaffProfile } from './production-server'
 import { DEFAULT_STEPS, isStepStatus, mentionedIds, planSplitFor } from './production'
 
 type Result = { ok: true } | { ok: false; error: string }
@@ -53,6 +53,7 @@ export async function setupProductionSteps(slug: string): Promise<Result> {
     const have = new Set((data ?? []).map(r => r.kind))
     const rows = DEFAULT_STEPS.filter(s => !have.has(s.kind)).map(s => ({ ...s, plan_slug: slug, updated_by: me.id }))
     if (rows.length && (await db.from('bfcm_production_steps').insert(rows)).error) return { ok: false, error: 'Unable to add the tasks.' }
+    await ensureCalibrationSubtasks(slug)
     return done(slug)
   })
 }
