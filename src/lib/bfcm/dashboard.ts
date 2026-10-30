@@ -2,7 +2,7 @@
 import { daysBetween } from '../eastern'
 import type { Draft } from './model'
 import { phaseAllocation } from './phase-allocation'
-import { KIND_CATEGORIES, PHASE_LABEL, effectiveStatus, planKeyCount, productionSummary, type Person, type Phase, type TaskNode } from './production'
+import { KIND_CATEGORIES, PHASE_LABEL, effectiveStatus, planKeyCount, type Person, type Phase, type TaskNode } from './production'
 
 export type PlanStage = 'none' | 'draft' | 'locked'
 export type BrandInput = {
@@ -12,6 +12,8 @@ export type BrandInput = {
 }
 export type Tally = { made: number; total: number }
 export type Launch = { label: string; date: string; days: number; left: number }
+export type StepProgress = { kind: string; label: string; status: 'todo' | 'in_progress' | 'waiting_client' | 'done' }
+export type TaskCounts = { todo: number; inProgress: number; waiting: number; done: number }
 export type Flag = { text: string; level: 'critical' | 'warning' }
 export type BrandProgress = Tally & {
   slug: string; name: string; stage: PlanStage
@@ -21,7 +23,8 @@ export type BrandProgress = Tally & {
   /** Creatives a day to hit every dated launch; null when nothing dated is left. */
   needPerDay: number | null
   undatedLeft: number
-  nextTask: string | null
+  steps: StepProgress[]
+  tasks: TaskCounts
   flags: Flag[]
 }
 export type PersonLoad = { id: string; name: string; open: number; overdue: number; creatives: number }
@@ -30,6 +33,7 @@ export type Board = Tally & {
   statics: Tally; motion: Tally; phases: Record<Phase, Tally>
   needPerDay: number; undatedLeft: number
   launch: (Launch & { brand: string }) | null
+  tasks: TaskCounts
   locked: number; withTasks: number; overdue: number
   brands: BrandProgress[]; people: PersonLoad[]
 }
@@ -51,8 +55,21 @@ function rowStatus(tasks: TaskNode[], kind: string, planKey: string): string {
   return step.children.some(c => c.plan_key) ? 'todo' : effectiveStatus(step)
 }
 
+const STEP_LABELS: [string, string][] = [['review', 'Review'], ['samples', 'Calibration'], ['statics', 'Statics'], ['motion', 'Motion'], ['check', 'Check']]
+function stepStatus(status: string): StepProgress['status'] {
+  return status === 'done' || status === 'todo' || status === 'waiting_client' ? status : 'in_progress'
+}
 const flatten = (nodes: TaskNode[]): TaskNode[] => nodes.flatMap(n => [n, ...flatten(n.children)])
 const openLeaves = (tasks: TaskNode[]) => flatten(tasks).filter(n => !n.children.length && effectiveStatus(n) !== 'done')
+function taskCounts(tasks: TaskNode[]): TaskCounts {
+  const counts: TaskCounts = { todo: 0, inProgress: 0, waiting: 0, done: 0 }
+  for (const task of flatten(tasks)) {
+    if (task.children.length) continue
+    const status = stepStatus(effectiveStatus(task))
+    counts[status === 'todo' ? 'todo' : status === 'done' ? 'done' : status === 'waiting_client' ? 'waiting' : 'inProgress']++
+  }
+  return counts
+}
 const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`
 
 export function brandProgress(input: BrandInput, today: string): BrandProgress {
@@ -91,9 +108,11 @@ export function brandProgress(input: BrandInput, today: string): BrandProgress {
   const overdue = open.filter(t => t.due_date && t.due_date < today).length
   const unassigned = open.filter(t => !t.assignees.length).length
   const undated = open.filter(t => !t.due_date).length
+  const waitingOn = open.filter(t => effectiveStatus(t) === 'waiting_client')
   const flags: Flag[] = []
   for (const l of launches) if (l.days < 0) flags.push({ level: 'critical', text: `${l.left} late for ${l.label}` })
   if (overdue) flags.push({ level: 'critical', text: `${plural(overdue, 'task')} overdue` })
+  for (const t of waitingOn) flags.push({ level: 'warning', text: `Waiting on client: ${t.title}` })
   if (input.stage !== 'locked') flags.push({ level: launch && launch.days <= 14 ? 'critical' : 'warning', text: input.stage === 'none' ? 'Onboarding not started' : 'Plan not locked' })
   if (!tasks.length) flags.push({ level: 'warning', text: 'No tasks set up' })
   if (undatedLeft) flags.push({ level: 'warning', text: 'No launch date' })
@@ -108,7 +127,11 @@ export function brandProgress(input: BrandInput, today: string): BrandProgress {
     statics, motion, launch,
     needPerDay: launches.length ? launches.reduce((sum, l) => sum + l.left / Math.max(l.days, 1), 0) : null,
     undatedLeft,
-    nextTask: productionSummary(tasks).next?.title ?? null,
+    steps: STEP_LABELS.flatMap(([kind, label]) => {
+      const step = tasks.find(t => t.kind === kind)
+      return step ? [{ kind, label, status: stepStatus(effectiveStatus(step)) }] : []
+    }),
+    tasks: taskCounts(tasks),
     flags,
   }
 }
@@ -146,6 +169,7 @@ export function productionBoard(inputs: BrandInput[], people: Person[], today: s
     needPerDay: sum(b => b.needPerDay ?? 0),
     undatedLeft: sum(b => b.undatedLeft),
     launch: soonest?.launch ? { ...soonest.launch, brand: soonest.name } : null,
+    tasks: { todo: sum(b => b.tasks.todo), inProgress: sum(b => b.tasks.inProgress), waiting: sum(b => b.tasks.waiting), done: sum(b => b.tasks.done) },
     locked: brands.filter(b => b.stage === 'locked').length,
     withTasks: inputs.filter(b => b.tasks.length).length,
     overdue: inputs.reduce((n, b) => n + openLeaves(b.tasks).filter(t => t.due_date && t.due_date < today).length, 0),

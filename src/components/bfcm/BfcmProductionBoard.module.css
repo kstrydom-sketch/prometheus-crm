@@ -39,7 +39,14 @@
 .cellHead { display: flex; align-items: baseline; gap: 4px; margin-bottom: 6px; font-variant-numeric: tabular-nums; }
 .cellHead .faint { margin-left: auto; }
 .launch { white-space: nowrap; }
-.next { min-width: 130px; color: var(--text-secondary); }
+.next { min-width: 130px; }
+.steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; font-size: 12px; white-space: nowrap; }
+.stepTodo { color: var(--text-muted); }
+.stepWork { color: var(--accent); font-weight: 600; }
+.stepWaiting { color: var(--warning); font-weight: 600; }
+.stepDone { color: var(--success); }
+.brandTable { margin-top: 12px; }
+.srOnly { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .flagCell { min-width: 190px; }
 .flags { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
 .flags li { display: flex; align-items: baseline; gap: 6px; color: var(--text-secondary); font-size: 12px; }

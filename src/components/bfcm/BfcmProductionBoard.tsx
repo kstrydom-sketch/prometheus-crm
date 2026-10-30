@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import type { Board, BrandProgress, Flag, Tally } from '@/lib/bfcm/dashboard'
+import type { Board, BrandProgress, Flag, StepProgress, Tally } from '@/lib/bfcm/dashboard'
 import { PHASE_LABEL } from '@/lib/bfcm/production'
 import styles from './BfcmProductionBoard.module.css'
 
@@ -30,6 +30,21 @@ function Flags({ flags }: { flags: Flag[] }) {
   return <ul className={styles.flags}>{flags.map(f => <li key={f.text} className={f.level === 'critical' ? styles.critical : styles.warning}>{f.text}</li>)}</ul>
 }
 
+const STEP_STATUS: Record<StepProgress['status'], { mark: string; name: string; className: string }> = {
+  todo: { mark: '○', name: 'Not started', className: styles.stepTodo },
+  in_progress: { mark: '◐', name: 'In progress', className: styles.stepWork },
+  waiting_client: { mark: '◷', name: 'Waiting on client', className: styles.stepWaiting },
+  done: { mark: '✓', name: 'Done', className: styles.stepDone },
+}
+
+function Steps({ steps }: { steps: StepProgress[] }) {
+  if (!steps.length) return <span className={styles.faint}>No tasks</span>
+  return <ul className={styles.steps}>{steps.map(step => {
+    const status = STEP_STATUS[step.status]
+    return <li key={step.kind} className={status.className} title={`${step.label}: ${status.name}`}><span aria-hidden="true">{status.mark}</span> {step.label}<span className={styles.srOnly}>: {status.name}</span></li>
+  })}</ul>
+}
+
 function BrandRow({ brand }: { brand: BrandProgress }) {
   return <tr>
     <th scope="row">
@@ -44,7 +59,7 @@ function BrandRow({ brand }: { brand: BrandProgress }) {
     <td className={styles.num}>{brand.motion.made} / {brand.motion.total}</td>
     <td className={styles.launch}>{brand.launch ? <><span className={brand.launch.days < 0 ? styles.lateText : undefined}>{shortDate(brand.launch.date)} · {daysText(brand.launch.days)}</span><span className={styles.faint}>{brand.launch.label}</span></> : <span className={styles.faint}>{brand.made === brand.total ? 'All made' : 'No date'}</span>}</td>
     <td className={styles.num}>{brand.needPerDay === null ? '—' : Math.ceil(brand.needPerDay)}</td>
-    <td className={styles.next}>{brand.nextTask ?? <span className={styles.faint}>—</span>}</td>
+    <td className={styles.next}><Steps steps={brand.steps} /></td>
     <td className={styles.flagCell}><Flags flags={brand.flags} /></td>
   </tr>
 }
@@ -78,6 +93,7 @@ export default function BfcmProductionBoard({ board }: { board: Board | null }) 
         <li>Motion {number(board.motion.made)} / {number(board.motion.total)}</li>
         <li>{PHASE_LABEL.pre} {number(board.phases.pre.made)} / {number(board.phases.pre.total)}</li>
         <li>{PHASE_LABEL.bf} {number(board.phases.bf.made)} / {number(board.phases.bf.total)}</li>
+        <li>Tasks: {board.tasks.done} done · {board.tasks.inProgress} in progress · {board.tasks.waiting} waiting on client · {board.tasks.todo} not started</li>
         <li>{board.locked} of {board.brands.length} plans locked</li>
         <li>{board.withTasks} of {board.brands.length} brands have tasks</li>
         <li className={board.overdue ? styles.lateText : undefined}>{board.overdue} {board.overdue === 1 ? 'task' : 'tasks'} overdue</li>
@@ -85,9 +101,10 @@ export default function BfcmProductionBoard({ board }: { board: Board | null }) 
     </div>
 
     <h3 className={styles.subTitle}>By brand, soonest launch first</h3>
-    <div className={styles.scroll}>
+    <ul className={styles.legend}>{Object.values(STEP_STATUS).map(status => <li key={status.name} className={status.className}><span aria-hidden="true">{status.mark}</span> {status.name}</li>)}</ul>
+    <div className={`${styles.scroll} ${styles.brandTable}`}>
       <table className={styles.table}>
-        <thead><tr><th scope="col">Brand</th><th scope="col">Made</th><th scope="col" className={styles.num}>Statics</th><th scope="col" className={styles.num}>Motion</th><th scope="col">Next launch</th><th scope="col" className={styles.num}>Per day</th><th scope="col">Next task</th><th scope="col">Needs attention</th></tr></thead>
+        <thead><tr><th scope="col">Brand</th><th scope="col">Made</th><th scope="col" className={styles.num}>Statics</th><th scope="col" className={styles.num}>Motion</th><th scope="col">Next launch</th><th scope="col" className={styles.num}>Per day</th><th scope="col">Steps</th><th scope="col">Needs attention</th></tr></thead>
         <tbody>{board.brands.map(brand => <BrandRow key={brand.slug} brand={brand} />)}</tbody>
       </table>
     </div>

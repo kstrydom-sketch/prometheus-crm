@@ -75,3 +75,16 @@ test('the board adds brands up and loads people by their open tasks', () => {
   assert.deepEqual([board.made, board.total, board.overdue, board.phases.bf], [10, 100, 1, { made: 10, total: 50 }])
   assert.deepEqual(board.people, [{ id: 'p1', name: 'Maker', open: 1, overdue: 1, creatives: 10 }])
 })
+
+test('every step status shows, and calibration waiting on the client is surfaced', () => {
+  const p = brandProgress(input([
+    step('r', 'review', 'done'),
+    step('c', 'samples'),
+    step('cs', 'calibration_statics', 'waiting_client', { parent_id: 'c', title: 'Statics samples' }),
+    step('cm', 'calibration_motion', 'in_progress', { parent_id: 'c' }),
+    step('s', 'statics'),
+  ]), today)
+  assert.deepEqual(p.steps.map(s => [s.label, s.status]), [['Review', 'done'], ['Calibration', 'in_progress'], ['Statics', 'todo']])
+  assert.deepEqual(p.tasks, { todo: 1, inProgress: 1, waiting: 1, done: 1 })
+  assert.ok(p.flags.some(f => f.text === 'Waiting on client: Statics samples'))
+})
