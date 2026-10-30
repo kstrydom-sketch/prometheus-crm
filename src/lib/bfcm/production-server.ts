@@ -53,12 +53,17 @@ export async function loadProduction(slug: string): Promise<{ ok: true; tasks: T
   return { ok: true, tasks: buildTaskTree(rows, assignees.data ?? [], counts), comments: list }
 }
 
-/** Every brand's tasks, grouped by plan, for the list page. Empty on any error. */
-export async function loadAllProductionTrees(): Promise<Map<string, TaskNode[]>> {
-  const { data, error } = await createServiceClient().from('bfcm_production_steps').select(STEP_COLUMNS)
+/** Every brand's tasks, grouped by plan, for the list page. Null on any error. */
+export async function loadAllProductionTrees(): Promise<Map<string, TaskNode[]> | null> {
+  const db = createServiceClient()
+  const [steps, assignees] = await Promise.all([
+    db.from('bfcm_production_steps').select(STEP_COLUMNS),
+    db.from('bfcm_step_assignees').select('step_id,profile_id'),
+  ])
+  if (steps.error || assignees.error) return null
   const bySlug = new Map<string, ProductionStep[]>()
-  if (!error) for (const s of (data ?? []) as ProductionStep[]) bySlug.set(s.plan_slug, [...(bySlug.get(s.plan_slug) ?? []), s])
-  return new Map([...bySlug].map(([slug, steps]) => [slug, buildTaskTree(steps, [], {})]))
+  for (const s of (steps.data ?? []) as ProductionStep[]) bySlug.set(s.plan_slug, [...(bySlug.get(s.plan_slug) ?? []), s])
+  return new Map([...bySlug].map(([slug, rows]) => [slug, buildTaskTree(rows, assignees.data ?? [], {})]))
 }
 
 const TRACK_COLUMNS = 'track,status,sent_at,submitted_at,submitted_by_name,client_note'
