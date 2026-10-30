@@ -1,6 +1,6 @@
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
-import { planDriveSync, sampleName } from './calibration-drive'
+import { isTrackFolder, planDriveSync, sampleName, sampleTrack } from './calibration-drive'
 
 const file = (id: string, mimeType = 'image/png', modifiedTime = '2026-10-30T10:00:00Z') => ({ id, name: `${id}.png`, mimeType, modifiedTime })
 
@@ -18,4 +18,16 @@ test('new files are added, edited files refreshed, unchanged and unsupported cou
 test('sample names drop the extension and control characters', () => {
   assert.equal(sampleName('BF_offer_01.final.png'), 'BF_offer_01.final')
   assert.equal(sampleName('.png'), 'Sample')
+})
+
+test('the folder decides the track, and a loose file goes by its type', () => {
+  assert.equal(sampleTrack({ mimeType: 'image/png', folderPath: ['Motion'] }), 'motion')
+  assert.equal(sampleTrack({ mimeType: 'video/mp4', folderPath: ['Statics', 'Pre-BF'] }), 'statics')
+  assert.equal(sampleTrack({ mimeType: 'video/mp4' }), 'motion')
+  assert.equal(sampleTrack({ mimeType: 'image/png', folderPath: [] }), 'statics')
+})
+
+test('only folders named for a track are read', () => {
+  assert.ok(isTrackFolder('Motion')); assert.ok(isTrackFolder('01 Statics'))
+  assert.ok(!isTrackFolder('00 Assets')); assert.ok(!isTrackFolder('03 Final (ads team)')); assert.ok(!isTrackFolder('02 Production'))
 })

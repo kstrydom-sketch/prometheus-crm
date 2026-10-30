@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation'
 import Avatar from '@/components/Avatar'
 import { DEFAULT_STEPS, KIND_CATEGORIES, STEP_STATUSES, effectiveStatus, planKeyCount, productionCounts, stepStatusLabel, type Person, type TaskNode } from '@/lib/bfcm/production'
 import type { Allocation } from '@/lib/bfcm/model'
-import type { BfcmComment, BrandContract, Calibration, CalibrationFeedback, CalibrationItem } from '@/lib/bfcm/production-server'
+import type { BfcmComment, BrandContract, Calibration, CalibrationFeedback, CalibrationItem, CalibrationTrackState } from '@/lib/bfcm/production-server'
 import { addTask, deleteTask, setTaskAssignees, setupProductionSteps, splitTaskByPlan, updateTask } from '@/lib/bfcm/production-actions'
 import BfcmComments from './BfcmComments'
 import BfcmCalibrationStaff from './BfcmCalibrationStaff'
@@ -12,7 +12,7 @@ import BfcmContract from './BfcmContract'
 import s from './BfcmProduction.module.css'
 
 type Plan = { allocation: Allocation; prePercent: number; noPreBf: boolean; locked: boolean }
-type CalibrationData = { calibration: Calibration | null; items: CalibrationItem[]; feedback: CalibrationFeedback[] } | null
+type CalibrationData = { calibration: Calibration | null; tracks: CalibrationTrackState[]; items: CalibrationItem[]; feedback: CalibrationFeedback[] } | null
 type Props = {
   slug: string; tasks: TaskNode[] | null; comments: BfcmComment[]; people: Person[]; meId: string | null; plan: Plan; today: string
   calibration: CalibrationData; brandId: string | null; contracts: BrandContract[] | null; documents: { id: string; file_name: string }[]

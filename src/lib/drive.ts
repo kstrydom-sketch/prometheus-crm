@@ -103,6 +103,39 @@ type DriveFile = { id: string; name: string; mimeType: string; modifiedTime?: st
  * to an empty project with no reason given.
  */
 export async function listDriveFolder(folderId: string): Promise<DriveFile[]> {
+  return (await listDriveChildren(folderId)).filter(isCreativeFile)
+}
+
+const isCreativeFile = (f: DriveFile) => f.mimeType.startsWith('image/') || f.mimeType.startsWith('video/')
+const DRIVE_FOLDER_MIME = 'application/vnd.google-apps.folder'
+
+/**
+ * Creatives in a folder and in the subfolders `includeFolder` accepts, recursively.
+ * Each file carries the subfolder names it sits under. Folders that are refused come
+ * back in `skippedFolders` and are not opened.
+ */
+export async function listDriveFolderTree(
+  folderId: string,
+  includeFolder: (name: string) => boolean,
+  depth = 3,
+): Promise<{ files: (DriveFile & { folderPath: string[] })[]; skippedFolders: string[] }> {
+  const files: (DriveFile & { folderPath: string[] })[] = []
+  const skippedFolders: string[] = []
+  const walk = async (id: string, path: string[]) => {
+    for (const child of await listDriveChildren(id)) {
+      if (isCreativeFile(child)) files.push({ ...child, folderPath: path })
+      else if (child.mimeType === DRIVE_FOLDER_MIME) {
+        // Below an accepted folder everything counts ("Statics/Pre-BF").
+        if (path.length > 0 || includeFolder(child.name)) { if (path.length < depth) await walk(child.id, [...path, child.name]) }
+        else skippedFolders.push(child.name)
+      }
+    }
+  }
+  await walk(folderId, [])
+  return { files, skippedFolders }
+}
+
+async function listDriveChildren(folderId: string): Promise<DriveFile[]> {
   const sa = readServiceAccountKey()
   const apiKey = process.env.GOOGLE_DRIVE_API_KEY
 
@@ -139,7 +172,7 @@ export async function listDriveFolder(folderId: string): Promise<DriveFile[]> {
     )
   }
   const data = (await res.json()) as { files?: DriveFile[] }
-  return (data.files ?? []).filter(f => f.mimeType.startsWith('image/') || f.mimeType.startsWith('video/'))
+  return data.files ?? []
 }
 
 /**

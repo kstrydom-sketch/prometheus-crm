@@ -3,8 +3,9 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useConfirm } from '@/components/ConfirmDialog'
 import { useToast } from '@/components/Toast'
-import type { CalibrationFeedback, CalibrationItem } from '@/lib/bfcm/production-server'
-import { clientAddSampleFeedback, clientSetSampleStatus, clientSubmitCalibration } from '@/lib/bfcm/calibration-actions'
+import { CALIBRATION_TRACKS } from '@/lib/bfcm/production'
+import type { CalibrationFeedback, CalibrationItem, CalibrationTrackState } from '@/lib/bfcm/production-server'
+import { clientAddSampleFeedback, clientSetSampleStatus, clientSubmitCalibrationTrack } from '@/lib/bfcm/calibration-actions'
 
 type Status = 'pending' | 'approved' | 'needs_changes'
 const NAME_KEY = 'bfcm-reviewer-name'
@@ -12,53 +13,82 @@ const readName = () => { try { return window.localStorage.getItem(NAME_KEY) ?? '
 const saveName = (name: string) => { try { window.localStorage.setItem(NAME_KEY, name) } catch { /* private mode */ } }
 
 /**
- * The client's side of calibration, modelled on the Moments review link: each sample
- * gets a verdict and notes (pinned on images), then one submit closes the round.
+ * The client's side of calibration, modelled on the Moments review link: a tab per
+ * track with its own approval. Each sample gets a verdict and notes (pinned on
+ * images), then one submit closes that track.
  */
-export default function BfcmCalibrationReview({ token, items, feedback, submitted }: { token: string; items: CalibrationItem[]; feedback: CalibrationFeedback[]; submitted: { by: string | null; at: string | null } | null }) {
+export default function BfcmCalibrationReview({ token, tracks, items, feedback }: { token: string; tracks: CalibrationTrackState[]; items: CalibrationItem[]; feedback: CalibrationFeedback[] }) {
+  const visible = CALIBRATION_TRACKS.filter(t => tracks.some(state => state.track === t.id))
+  const [tab, setTab] = useState<string>(visible[0]?.id ?? 'statics')
+  const [name, setName] = useState('')
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- browser storage is only readable after hydration
+  useEffect(() => { setName(readName()) }, [])
+  const open = tracks.some(t => t.status === 'sent')
+
+  return <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
+    {open && <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <p style={{ margin: 0, color: 'var(--text-secondary)', lineHeight: 1.6 }}>These are early samples so we can lock the direction before making your full Black Friday set. Mark each one, leave notes (click “Pin a note” to point at a spot on an image), then submit your feedback at the bottom.</p>
+      <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', maxWidth: 320, textTransform: 'none', letterSpacing: 'normal', margin: 0 }}>
+        Your name
+        <input value={name} onChange={e => { setName(e.target.value); saveName(e.target.value) }} placeholder="So we know who left each note" style={{ padding: '8px 10px', fontWeight: 400 }} />
+      </label>
+    </div>}
+    {/* Same tab idiom as ClientReviewTabs on the Moments review link. */}
+    <div>
+      <div role="tablist" style={{ display: 'flex', gap: 24, borderBottom: '1px solid var(--border)', marginBottom: 24, overflowX: 'auto', overflowY: 'hidden' }}>
+        {visible.map(t => {
+          const count = items.filter(i => i.track === t.id).length
+          return <button key={t.id} role="tab" aria-selected={tab === t.id} onClick={() => setTab(t.id)} style={{
+            background: 'none', border: 'none', cursor: 'pointer', padding: '10px 0 12px', fontSize: 13, fontWeight: tab === t.id ? 700 : 500, whiteSpace: 'nowrap',
+            color: tab === t.id ? 'var(--text-primary)' : 'var(--text-muted)', borderBottom: `2px solid ${tab === t.id ? 'var(--accent)' : 'transparent'}`,
+            marginBottom: -1, display: 'inline-flex', alignItems: 'center', gap: 8,
+          }}>
+            {t.label}
+            <span style={{ fontSize: 11, fontWeight: 700, padding: '1px 8px', borderRadius: 10, background: 'var(--surface-raised)', color: 'var(--text-secondary)' }}>{count}</span>
+          </button>
+        })}
+      </div>
+      {/* All tracks stay mounted, so switching tabs never loses a half-written note. */}
+      {visible.map(t => <div key={t.id} hidden={tab !== t.id}>
+        <TrackReview token={token} name={name} label={t.label} track={t.id} state={tracks.find(state => state.track === t.id)!} items={items.filter(i => i.track === t.id)} feedback={feedback} />
+      </div>)}
+    </div>
+  </div>
+}
+
+function TrackReview({ token, name, label, track, state, items, feedback }: { token: string; name: string; label: string; track: string; state: CalibrationTrackState; items: CalibrationItem[]; feedback: CalibrationFeedback[] }) {
   const router = useRouter()
   const confirm = useConfirm()
   const toast = useToast()
-  const [name, setName] = useState('')
   const [statuses, setStatuses] = useState<Record<string, string>>(() => Object.fromEntries(items.map(i => [i.id, i.client_status])))
   const [note, setNote] = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const locked = !!submitted
-  // eslint-disable-next-line react-hooks/set-state-in-effect -- browser storage is only readable after hydration
-  useEffect(() => { setName(readName()) }, [])
-
+  const locked = state.status === 'submitted'
+  const lower = label.toLowerCase()
   const approved = Object.values(statuses).filter(st => st === 'approved').length
   const changes = Object.values(statuses).filter(st => st === 'needs_changes').length
 
   async function submit() {
-    const ok = await confirm({ title: 'Submit your feedback', message: 'This sends your notes to the team, who use them to make the full set. You won’t be able to change them here afterwards.', confirmLabel: 'Submit feedback' })
+    const ok = await confirm({ title: `Submit your ${lower} feedback`, message: `This sends your notes on the ${lower} to the team, who use them to make the full set. You won’t be able to change them here afterwards.`, confirmLabel: 'Submit feedback' })
     if (!ok) return
     setSubmitting(true)
-    const result = await clientSubmitCalibration(token, name, note)
+    const result = await clientSubmitCalibrationTrack(token, track, name, note)
     if (result.ok) { toast.success('Thank you! Your feedback is with the team.'); router.refresh() } else toast.error(result.error)
     setSubmitting(false)
   }
 
   return <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
-    {locked
-      ? <div style={{ padding: 'var(--space-3) var(--space-4)', borderRadius: 10, background: 'color-mix(in srgb, var(--success) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--success) 25%, transparent)', color: 'var(--success)', fontWeight: 600 }}>
-          Feedback submitted{submitted.by ? ` by ${submitted.by}` : ''}. Thank you, the team is using it for the full set.
-        </div>
-      : <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <p style={{ margin: 0, color: 'var(--text-secondary)', lineHeight: 1.6 }}>These are early samples so we can lock the direction before making your full Black Friday set. Mark each one, leave notes (click “Pin a note” to point at a spot on an image), then submit your feedback at the bottom.</p>
-          <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', maxWidth: 320 }}>
-            Your name
-            <input value={name} onChange={e => { setName(e.target.value); saveName(e.target.value) }} placeholder="So we know who left each note" style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--text-primary)', font: 'inherit', fontWeight: 400 }} />
-          </label>
-        </div>}
+    {locked && <div style={{ padding: 'var(--space-3) var(--space-4)', borderRadius: 10, background: 'color-mix(in srgb, var(--success) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--success) 25%, transparent)', color: 'var(--success)', fontWeight: 600 }}>
+      {label} feedback submitted{state.submitted_by_name ? ` by ${state.submitted_by_name}` : ''}. Thank you, the team is using it for the full set.
+    </div>}
     <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}><strong style={{ color: 'var(--text-primary)' }}>{items.length}</strong> samples · <span style={{ color: 'var(--success)' }}>{approved} look good</span> · <span style={{ color: 'var(--danger)' }}>{changes} need changes</span></div>
     {items.map((item, i) => <Sample key={item.id} index={i} item={item} token={token} name={name} locked={locked}
       status={statuses[item.id] ?? 'pending'} onStatus={st => setStatuses(prev => ({ ...prev, [item.id]: st }))}
       initial={feedback.filter(f => f.item_id === item.id)} />)}
     {!locked && items.length > 0 && <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <strong>Anything else about the overall direction?</strong>
-      <textarea value={note} onChange={e => setNote(e.target.value)} rows={3} maxLength={5000} placeholder="Optional" style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--background)', color: 'var(--text-primary)', font: 'inherit', resize: 'vertical' }} />
-      <div><button className="btn-primary" disabled={submitting} onClick={() => void submit()}>{submitting ? 'Submitting…' : 'Submit feedback'}</button></div>
+      <strong>Anything else about the overall direction of the {lower}?</strong>
+      <textarea value={note} onChange={e => setNote(e.target.value)} rows={3} maxLength={5000} placeholder="Optional" style={{ padding: '8px 10px', resize: 'vertical' }} />
+      <div><button className="btn-primary" disabled={submitting} onClick={() => void submit()}>{submitting ? 'Submitting…' : `Submit ${lower} feedback`}</button></div>
     </div>}
   </div>
 }

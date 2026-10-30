@@ -3,15 +3,16 @@ import { createServiceClient } from '@/lib/supabase/service'
 import { getCachedUser } from '@/lib/supabase/server'
 import { getCachedProfiles } from '@/lib/profiles'
 import { canEdit } from '@/lib/permissions'
-import { buildTaskTree, type Person, type ProductionStep, type TaskNode } from './production'
+import { CALIBRATION_TRACKS, buildTaskTree, type Person, type ProductionStep, type TaskNode } from './production'
 import { CALIBRATION_BUCKET } from './calibration-drive'
 
 const STEP_COLUMNS = 'id,plan_slug,parent_id,sort_order,kind,title,plan_key,due_date,status'
 
 export type BfcmComment = { id: string; step_id: string | null; author_id: string | null; author_name: string; body: string; created_at: string }
-export type CalibrationItem = { id: string; name: string; media_type: 'image' | 'video'; url: string; sort_order: number; client_status: string; created_at: string }
+export type CalibrationItem = { id: string; track: string; name: string; media_type: 'image' | 'video'; url: string; sort_order: number; client_status: string; created_at: string }
 export type CalibrationFeedback = { id: string; item_id: string; author_name: string; body: string; pin_x: number | null; pin_y: number | null; created_at: string }
-export type Calibration = { plan_slug: string; share_token: string; status: string; drive_folder_url: string | null; sent_at: string | null; submitted_at: string | null; submitted_by_name: string | null; client_note: string | null }
+export type Calibration = { plan_slug: string; share_token: string; drive_folder_url: string | null }
+export type CalibrationTrackState = { track: string; status: string; sent_at: string | null; submitted_at: string | null; submitted_by_name: string | null; client_note: string | null }
 export type BrandContract = { id: string; brand_id: string; document_id: string | null; file_name: string | null; title: string; signed_on: string | null; deliverables: string; revisions: string; special_terms: string; updated_by_name: string | null; updated_at: string }
 
 /** Teammates who can be assigned or @mentioned: everyone with CRM access. */
@@ -60,22 +61,50 @@ export async function loadAllProductionTrees(): Promise<Map<string, TaskNode[]>>
   return new Map([...bySlug].map(([slug, steps]) => [slug, buildTaskTree(steps, [], {})]))
 }
 
-export async function loadCalibration(slug: string): Promise<{ calibration: Calibration | null; items: CalibrationItem[]; feedback: CalibrationFeedback[] } | null> {
+const TRACK_COLUMNS = 'track,status,sent_at,submitted_at,submitted_by_name,client_note'
+
+export async function loadCalibration(slug: string): Promise<{ calibration: Calibration | null; tracks: CalibrationTrackState[]; items: CalibrationItem[]; feedback: CalibrationFeedback[] } | null> {
   const db = createServiceClient()
-  const cal = await db.from('bfcm_calibrations').select('plan_slug,share_token,status,sent_at,submitted_at,submitted_by_name,client_note,drive_folder_url').eq('plan_slug', slug).maybeSingle()
+  const cal = await db.from('bfcm_calibrations').select('plan_slug,share_token,drive_folder_url').eq('plan_slug', slug).maybeSingle()
   if (cal.error) return null
-  if (!cal.data) return { calibration: null, items: [], feedback: [] }
-  return { calibration: cal.data as Calibration, ...await loadCalibrationItems(slug) }
+  if (!cal.data) return { calibration: null, tracks: [], items: [], feedback: [] }
+  const tracks = await db.from('bfcm_calibration_tracks').select(TRACK_COLUMNS).eq('plan_slug', slug)
+  if (tracks.error) return null
+  return { calibration: cal.data as Calibration, tracks: (tracks.data ?? []) as CalibrationTrackState[], ...await loadCalibrationItems(slug) }
 }
 
-export async function loadCalibrationItems(slug: string): Promise<{ items: CalibrationItem[]; feedback: CalibrationFeedback[] }> {
+/** What a client link may show: only tracks the team published. Nothing else reaches the page. */
+export async function loadClientCalibration(token: string) {
   const db = createServiceClient()
-  const { data } = await db.from('bfcm_calibration_items').select('id,name,media_type,storage_path,sort_order,client_status,created_at').eq('plan_slug', slug).order('sort_order').order('created_at')
+  const { data: cal } = await db.from('bfcm_calibrations').select('plan_slug').eq('share_token', token).maybeSingle()
+  if (!cal) return null
+  const { data } = await db.from('bfcm_calibration_tracks').select(TRACK_COLUMNS).eq('plan_slug', cal.plan_slug).in('status', ['sent', 'submitted'])
+  const tracks = (data ?? []) as CalibrationTrackState[]
+  const content = tracks.length ? await loadCalibrationItems(cal.plan_slug, tracks.map(t => t.track)) : { items: [], feedback: [] }
+  return { slug: cal.plan_slug as string, tracks, ...content }
+}
+
+export async function loadCalibrationItems(slug: string, onlyTracks?: string[]): Promise<{ items: CalibrationItem[]; feedback: CalibrationFeedback[] }> {
+  const db = createServiceClient()
+  let query = db.from('bfcm_calibration_items').select('id,track,name,media_type,storage_path,sort_order,client_status,created_at').eq('plan_slug', slug)
+  if (onlyTracks) query = query.in('track', onlyTracks)
+  const { data } = await query.order('sort_order').order('created_at')
   const items = ((data ?? []) as (Omit<CalibrationItem, 'url'> & { storage_path: string })[]).map(({ storage_path, ...item }) => ({ ...item, url: calibrationUrl(storage_path) }))
   const feedback = items.length
     ? ((await db.from('bfcm_calibration_feedback').select('id,item_id,author_name,body,pin_x,pin_y,created_at').in('item_id', items.map(i => i.id)).order('created_at')).data ?? []) as CalibrationFeedback[]
     : []
   return { items, feedback }
+}
+
+/** Gives the samples task its Statics and Motion subtasks if it doesn't have them. */
+export async function ensureCalibrationSubtasks(slug: string) {
+  const db = createServiceClient()
+  const { data: parent } = await db.from('bfcm_production_steps').select('id,due_date').eq('plan_slug', slug).eq('kind', 'samples').is('parent_id', null).maybeSingle()
+  if (!parent) return
+  const { data: have } = await db.from('bfcm_production_steps').select('kind').eq('parent_id', parent.id)
+  const rows = CALIBRATION_TRACKS.filter(t => !have?.some(h => h.kind === t.kind))
+    .map(t => ({ plan_slug: slug, parent_id: parent.id, kind: t.kind, title: t.title, sort_order: t.sort_order, due_date: parent.due_date }))
+  if (rows.length) await db.from('bfcm_production_steps').insert(rows)
 }
 
 export async function loadContracts(brandId: string | null): Promise<BrandContract[] | null> {

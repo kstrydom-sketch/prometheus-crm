@@ -2,7 +2,7 @@
 import { CATEGORIES, type Allocation, type Category, type PlanSnapshot } from './model'
 import { phaseAllocation } from './phase-allocation'
 
-export type StepKind = 'review' | 'samples' | 'statics' | 'motion' | 'check' | 'task'
+export type StepKind = 'review' | 'samples' | 'statics' | 'motion' | 'check' | 'task' | 'calibration_statics' | 'calibration_motion'
 export type StepStatus = 'todo' | 'in_progress' | 'waiting_client' | 'done'
 export type Phase = 'pre' | 'bf'
 export type ProductionStep = {
@@ -12,13 +12,18 @@ export type ProductionStep = {
 export type Person = { id: string; name: string }
 export type TaskNode = ProductionStep & { assignees: string[]; commentCount: number; children: TaskNode[] }
 
-export const DEFAULT_STEPS: { kind: Exclude<StepKind, 'task'>; title: string; sort_order: number }[] = [
+export const DEFAULT_STEPS: { kind: Exclude<StepKind, 'task' | 'calibration_statics' | 'calibration_motion'>; title: string; sort_order: number }[] = [
   { kind: 'review', title: 'Review client plan & split', sort_order: 1 },
   { kind: 'samples', title: 'Calibration samples for the client', sort_order: 2 },
   { kind: 'statics', title: 'Make statics', sort_order: 3 },
   { kind: 'motion', title: 'Make motion', sort_order: 4 },
   { kind: 'check', title: 'Internal check & send', sort_order: 5 },
 ]
+/** Calibration's two tracks, like Landing Page and Creatives on a Moments project. Each is a subtask of the samples task. */
+export const CALIBRATION_TRACKS = [
+  { id: 'statics', label: 'Statics', kind: 'calibration_statics', title: 'Statics samples', sort_order: 1 },
+  { id: 'motion', label: 'Motion', kind: 'calibration_motion', title: 'Motion samples', sort_order: 2 },
+] as const
 export const STEP_STATUSES: { id: StepStatus; label: string }[] = [
   { id: 'todo', label: 'Not started' },
   { id: 'in_progress', label: 'In progress' },

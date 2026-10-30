@@ -85,6 +85,13 @@
 .field { display: flex; flex-direction: column; gap: 4px; font-weight: 600; color: var(--text-secondary); font-size: 12px; }
 .field textarea, .field input { font-weight: 400; font-size: 13px; }
 
+.track { border-top: 1px solid var(--border); padding-top: 12px; display: flex; flex-direction: column; gap: 10px; }
+.chip { margin-top: 4px; font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+.chip[data-state="draft"] { color: var(--warning); }
+.chip[data-state="sent"], .chip[data-state="submitted"] { color: var(--success); }
+.notice { margin: 8px 0 0; padding: 8px 10px; border-radius: 8px; font-weight: 600; }
+.notice[data-tone="warn"] { color: var(--warning); background: color-mix(in srgb, var(--warning) 10%, transparent); }
+.notice[data-tone="ok"] { color: var(--success); background: color-mix(in srgb, var(--success) 10%, transparent); }
 .fileButton { display: inline-flex; align-items: center; margin: 0; cursor: pointer; text-transform: none; letter-spacing: normal; }
 
 @media (max-width: 720px) {
