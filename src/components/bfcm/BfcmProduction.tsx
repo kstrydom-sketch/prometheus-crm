@@ -5,7 +5,7 @@ import Avatar from '@/components/Avatar'
 import { DEFAULT_STEPS, KIND_CATEGORIES, STEP_STATUSES, effectiveStatus, planKeyCount, productionCounts, stepStatusLabel, type Person, type TaskNode } from '@/lib/bfcm/production'
 import type { Allocation } from '@/lib/bfcm/model'
 import type { BfcmComment, BrandContract, Calibration, CalibrationFeedback, CalibrationItem, CalibrationTrackState } from '@/lib/bfcm/production-server'
-import { addTask, deleteTask, setTaskAssignees, setupProductionSteps, splitTaskByPlan, updateTask } from '@/lib/bfcm/production-actions'
+import { addTask, deleteTask, setMadeCount, setTaskAssignees, setupProductionSteps, splitTaskByPlan, updateTask } from '@/lib/bfcm/production-actions'
 import BfcmComments from './BfcmComments'
 import BfcmCalibrationStaff from './BfcmCalibrationStaff'
 import BfcmContract from './BfcmContract'
@@ -103,6 +103,20 @@ function TaskBlock({ node, ctx }: { node: TaskNode; ctx: Ctx }) {
   </>
 }
 
+/** Saves when the field loses focus or Enter is pressed. */
+function MadeInput({ node, full, ctx }: { node: TaskNode; full: number; ctx: Ctx }) {
+  const made = node.status === 'done' ? full : Math.min(node.made_count, full)
+  const save = (value: string) => {
+    const next = Number(value)
+    if (value !== '' && next !== made) void ctx.run(() => setMadeCount(ctx.slug, node.id, next))
+  }
+  return <label className={s.made} title="How many are made so far">
+    <input key={made} className={s.madeInput} type="number" inputMode="numeric" min={0} max={full} step={1} defaultValue={made} disabled={ctx.busy} aria-label={`Made so far: ${node.title}`}
+      onBlur={e => save(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }} />
+    <span>/ {full} made</span>
+  </label>
+}
+
 function TaskRow({ node, ctx, sub }: { node: TaskNode; ctx: Ctx; sub: boolean }) {
   const { slug, people, plan, today, busy, run } = ctx
   const [renaming, setRenaming] = useState(false)
@@ -116,7 +130,7 @@ function TaskRow({ node, ctx, sub }: { node: TaskNode; ctx: Ctx; sub: boolean })
   const meta = [
     !sub && node.kind === 'statics' ? `${counts.statics.total} statics · ${counts.statics.detail}` : null,
     !sub && node.kind === 'motion' ? `${counts.motion.total} motion · ${counts.motion.detail}` : null,
-    linked !== null ? `${linked} ads${linked === 0 ? ' (the plan has none here now)' : ''}` : null,
+    linked === 0 ? '0 ads (the plan has none here now)' : null,
     derived ? `${node.children.filter(c => effectiveStatus(c) === 'done').length}/${node.children.length} subtasks` : null,
   ].filter(Boolean).join(' · ')
   const canSplit = !sub && !!KIND_CATEGORIES[node.kind]
@@ -135,6 +149,7 @@ function TaskRow({ node, ctx, sub }: { node: TaskNode; ctx: Ctx; sub: boolean })
           : <button className={s.name} onClick={() => ctx.toggle(node.id)} title={node.title}>{node.title}</button>}
         {meta && <span className={s.meta}>{meta}</span>}
       </div>
+      {linked ? <MadeInput node={node} full={linked} ctx={ctx} /> : null}
     </div>
     <AssigneePicker people={people} selected={node.assignees} disabled={busy} title={node.title} onChange={ids => void run(() => setTaskAssignees(slug, node.id, ids))} />
     <span className={s.dueCell}>

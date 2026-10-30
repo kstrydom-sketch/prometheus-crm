@@ -70,13 +70,14 @@ export default function BfcmProductionBoard({ board }: { board: Board | null }) 
   return <section className={styles.section} aria-labelledby="bfcm-production-title">
     <div className={styles.head}>
       <h2 id="bfcm-production-title" className={styles.title}>Production progress</h2>
-      <p className={styles.sub}>Creatives count as made when their task is marked Done. Pace is calendar days to each launch.</p>
+      <p className={styles.sub}>Made counts come from each subtask’s “made so far”. Pace is calendar days to each launch.</p>
     </div>
 
     <div className={styles.stats}>
       <Stat label="Creatives made" value={`${percent(board)}%`} note={`${number(board.made)} of ${number(board.total)}`} />
       <Stat label="Still to make" value={number(left)} note={`${number(board.inWork)} in production · ${number(board.waiting)} waiting on client`} />
       <Stat label="Needed per day" value={number(Math.ceil(board.needPerDay))} note={board.undatedLeft ? `${number(board.undatedLeft)} more have no launch date` : 'to hit every launch'} />
+      <Stat label="Actual per day" value={number(Math.round(board.madePerDay))} note={`7-day average · ${number(board.madeToday)} made today`} />
       <Stat label="Next launch" value={board.launch ? daysText(board.launch.days) : '—'} note={board.launch ? `${board.launch.brand} · ${board.launch.label}, ${shortDate(board.launch.date)}` : 'No launch dates yet'} />
     </div>
 

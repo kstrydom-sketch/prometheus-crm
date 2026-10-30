@@ -1,9 +1,10 @@
 /** Production progress across every brand, for the BFCM list page. Pure; safe for client and server. */
-import { daysBetween } from '../eastern'
+import { daysBetween, easternDateOf } from '../eastern'
 import type { Draft } from './model'
 import { phaseAllocation } from './phase-allocation'
 import { KIND_CATEGORIES, PHASE_LABEL, effectiveStatus, planKeyCount, type Person, type Phase, type TaskNode } from './production'
 
+export type MadeEntry = { delta: number; created_at: string }
 export type PlanStage = 'none' | 'draft' | 'locked'
 export type BrandInput = {
   slug: string; name: string; cap: number; stage: PlanStage
@@ -32,6 +33,7 @@ export type Board = Tally & {
   inWork: number; waiting: number; notStarted: number
   statics: Tally; motion: Tally; phases: Record<Phase, Tally>
   needPerDay: number; undatedLeft: number
+  madeToday: number; madePerDay: number
   launch: (Launch & { brand: string }) | null
   tasks: TaskCounts
   locked: number; withTasks: number; overdue: number
@@ -46,13 +48,18 @@ function bucketOf(status: string): Bucket {
   return status === 'waiting_client' ? 'waiting' : 'inWork'
 }
 
-/** A plan row's status: its own subtask, or the Make step's when the step was never split by plan. */
-function rowStatus(tasks: TaskNode[], kind: string, planKey: string): string {
+/** A plan row's status and count: its own subtask, or the Make step's when the step was never split by plan. */
+function rowState(tasks: TaskNode[], kind: string, planKey: string, quantity: number): { made: number; rest: Bucket } {
   const step = tasks.find(t => t.kind === kind)
-  if (!step) return 'todo'
+  if (!step) return { made: 0, rest: 'notStarted' }
   const linked = step.children.find(c => c.plan_key === planKey)
-  if (linked) return effectiveStatus(linked)
-  return step.children.some(c => c.plan_key) ? 'todo' : effectiveStatus(step)
+  if (linked) {
+    const bucket = bucketOf(effectiveStatus(linked))
+    return { made: bucket === 'made' ? quantity : Math.min(linked.made_count, quantity), rest: bucket === 'made' ? 'notStarted' : bucket }
+  }
+  if (step.children.some(c => c.plan_key)) return { made: 0, rest: 'notStarted' }
+  const bucket = bucketOf(effectiveStatus(step))
+  return { made: bucket === 'made' ? quantity : 0, rest: bucket === 'made' ? 'notStarted' : bucket }
 }
 
 const STEP_LABELS: [string, string][] = [['review', 'Review'], ['samples', 'Calibration'], ['statics', 'Statics'], ['motion', 'Motion'], ['check', 'Check']]
@@ -84,11 +91,12 @@ export function brandProgress(input: BrandInput, today: string): BrandProgress {
       const row = allocation.rows.find(r => r.id === category)
       if (!row) continue
       for (const phase of ['pre', 'bf'] as Phase[]) {
-        const bucket = bucketOf(rowStatus(tasks, kind, `${category}:${phase}`))
-        counts[bucket] += row[phase]
+        const { made, rest } = rowState(tasks, kind, `${category}:${phase}`, row[phase])
+        counts.made += made
+        counts[rest] += row[phase] - made
         tally.total += row[phase]
-        if (bucket === 'made') tally.made += row[phase]
-        else left[phase] += row[phase]
+        tally.made += made
+        left[phase] += row[phase] - made
       }
     }
   }
@@ -118,6 +126,10 @@ export function brandProgress(input: BrandInput, today: string): BrandProgress {
   if (undatedLeft) flags.push({ level: 'warning', text: 'No launch date' })
   if (unassigned) flags.push({ level: 'warning', text: `${plural(unassigned, 'task')} unassigned` })
   if (undated) flags.push({ level: 'warning', text: `${plural(undated, 'task')} without a due date` })
+  for (const [kind, label] of [['statics', 'Statics'], ['motion', 'Motion']]) {
+    const step = tasks.find(t => t.kind === kind)
+    if (step && effectiveStatus(step) !== 'done' && !step.children.some(c => c.plan_key)) flags.push({ level: 'warning', text: `${label} not split by plan, so it can't be counted` })
+  }
   if (unallocated) flags.push({ level: 'warning', text: `${unallocated} not allocated` })
 
   const total = allocation.total + unallocated
@@ -136,7 +148,7 @@ export function brandProgress(input: BrandInput, today: string): BrandProgress {
   }
 }
 
-export function productionBoard(inputs: BrandInput[], people: Person[], today: string): Board {
+export function productionBoard(inputs: BrandInput[], people: Person[], today: string, log: MadeEntry[] = []): Board {
   const brands = inputs.map(input => brandProgress(input, today)).sort((a, b) =>
     (a.launch?.date ?? '9999').localeCompare(b.launch?.date ?? '9999') || b.total - a.total || a.name.localeCompare(b.name))
   const sum = (pick: (b: BrandProgress) => number) => brands.reduce((n, b) => n + pick(b), 0)
@@ -147,7 +159,7 @@ export function productionBoard(inputs: BrandInput[], people: Person[], today: s
     phases.pre.total += allocation.pre
     phases.bf.total += allocation.bf + Math.max(0, input.cap - allocation.total)
     for (const [kind, categories] of Object.entries(KIND_CATEGORIES)) for (const category of categories ?? []) for (const phase of ['pre', 'bf'] as Phase[]) {
-      if (bucketOf(rowStatus(input.tasks, kind, `${category}:${phase}`)) === 'made') phases[phase].made += allocation.rows.find(r => r.id === category)?.[phase] ?? 0
+      phases[phase].made += rowState(input.tasks, kind, `${category}:${phase}`, allocation.rows.find(r => r.id === category)?.[phase] ?? 0).made
     }
     for (const task of flatten(input.tasks)) {
       if (effectiveStatus(task) === 'done') continue
@@ -156,11 +168,13 @@ export function productionBoard(inputs: BrandInput[], people: Person[], today: s
         if (!load) continue
         load.open++
         if (task.due_date && task.due_date < today) load.overdue++
-        load.creatives += planKeyCount(task.plan_key, input.draft) ?? 0
+        load.creatives += Math.max(0, (planKeyCount(task.plan_key, input.draft) ?? 0) - task.made_count)
       }
     }
   }
   const soonest = brands.find(b => b.launch)
+  const daysAgo = (entry: MadeEntry) => daysBetween(easternDateOf(entry.created_at), today)
+  const madeIn = (days: number) => log.filter(e => daysAgo(e) < days).reduce((n, e) => n + e.delta, 0)
   return {
     made: sum(b => b.made), total: sum(b => b.total), inWork: sum(b => b.inWork), waiting: sum(b => b.waiting), notStarted: sum(b => b.notStarted),
     statics: { made: sum(b => b.statics.made), total: sum(b => b.statics.total) },
@@ -168,6 +182,8 @@ export function productionBoard(inputs: BrandInput[], people: Person[], today: s
     phases,
     needPerDay: sum(b => b.needPerDay ?? 0),
     undatedLeft: sum(b => b.undatedLeft),
+    madeToday: madeIn(1),
+    madePerDay: madeIn(7) / 7,
     launch: soonest?.launch ? { ...soonest.launch, brand: soonest.name } : null,
     tasks: { todo: sum(b => b.tasks.todo), inProgress: sum(b => b.tasks.inProgress), waiting: sum(b => b.tasks.waiting), done: sum(b => b.tasks.done) },
     locked: brands.filter(b => b.stage === 'locked').length,

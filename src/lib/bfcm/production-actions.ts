@@ -5,7 +5,7 @@ import { createServiceClient } from '@/lib/supabase/service'
 import { createNotifications } from '@/lib/notifications'
 import { loadPlan } from './server'
 import { ensureCalibrationSubtasks, loadPeople, requireStaffProfile } from './production-server'
-import { DEFAULT_STEPS, isStepStatus, mentionedIds, planSplitFor } from './production'
+import { DEFAULT_STEPS, isStepStatus, mentionedIds, planKeyCount, planSplitFor } from './production'
 
 type Result = { ok: true } | { ok: false; error: string }
 const validSlug = (slug: string) => typeof slug === 'string' && /^[a-z0-9][a-z0-9-]{0,99}$/.test(slug)
@@ -29,8 +29,12 @@ async function run(slug: string, body: (me: { id: string | null; name: string })
   }
 }
 async function stepOf(slug: string, id: string) {
-  const { data } = await createServiceClient().from('bfcm_production_steps').select('id,kind,parent_id,title').eq('id', id).eq('plan_slug', slug).maybeSingle()
-  return data as { id: string; kind: string; parent_id: string | null; title: string } | null
+  const { data } = await createServiceClient().from('bfcm_production_steps').select('id,kind,parent_id,title,plan_key,made_count').eq('id', id).eq('plan_slug', slug).maybeSingle()
+  return data as { id: string; kind: string; parent_id: string | null; title: string; plan_key: string | null; made_count: number } | null
+}
+/** The change to log; nothing when the count didn't move. */
+async function logMade(slug: string, stepId: string, delta: number, by: string | null) {
+  if (delta) await createServiceClient().from('bfcm_made_log').insert({ plan_slug: slug, step_id: stepId, delta, created_by: by })
 }
 async function planContext(slug: string) {
   const { data } = await createServiceClient().from('bfcm_plans').select('brand_id,config').eq('slug', slug).maybeSingle()
@@ -97,7 +101,7 @@ export async function updateTask(slug: string, id: string, patch: { title?: stri
     const step = validId(id) ? await stepOf(slug, id) : null
     if (!step) return { ok: false, error: 'That task no longer exists.' }
     const db = createServiceClient()
-    const update: Record<string, string | null> = {}
+    const update: Record<string, string | number | null> = {}
     if ('title' in patch) {
       const clean = cleanTitle(patch.title)
       if (!clean || clean.length > 120) return { ok: false, error: 'Give the task a name (up to 120 characters).' }
@@ -113,10 +117,31 @@ export async function updateTask(slug: string, id: string, patch: { title?: stri
       const { count } = await db.from('bfcm_production_steps').select('id', { count: 'exact', head: true }).eq('parent_id', step.id)
       if (count) return { ok: false, error: 'This task’s status follows its subtasks.' }
       update.status = patch.status
+      // Done means all of them are made, so the count and the pace stay true.
+      if (patch.status === 'done' && step.plan_key) update.made_count = planKeyCount(step.plan_key, (await loadPlan(slug)).draft) ?? step.made_count
     }
     if (!Object.keys(update).length) return { ok: true }
     const { error } = await db.from('bfcm_production_steps').update({ ...update, updated_at: new Date().toISOString(), updated_by: me.id }).eq('id', step.id)
-    return error ? { ok: false, error: 'Unable to save. Reload and try again.' } : done(slug)
+    if (error) return { ok: false, error: 'Unable to save. Reload and try again.' }
+    if (typeof update.made_count === 'number') await logMade(slug, step.id, update.made_count - step.made_count, me.id)
+    return done(slug)
+  })
+}
+
+/** How many of a plan-linked subtask's creatives are made. Moves the status along with it. */
+export async function setMadeCount(slug: string, id: string, made: number): Promise<Result> {
+  return run(slug, async me => {
+    const step = validId(id) ? await stepOf(slug, id) : null
+    if (!step?.plan_key) return { ok: false, error: 'That task no longer exists.' }
+    const full = planKeyCount(step.plan_key, (await loadPlan(slug)).draft) ?? 0
+    if (!Number.isSafeInteger(made) || made < 0 || made > full) return { ok: false, error: `Enter a whole number from 0 to ${full}.` }
+    const db = createServiceClient()
+    const { data: current } = await db.from('bfcm_production_steps').select('status').eq('id', step.id).maybeSingle()
+    const status = made === full && full > 0 ? 'done' : made > 0 && (current?.status === 'todo' || current?.status === 'done') ? 'in_progress' : made === 0 && current?.status === 'done' ? 'todo' : current?.status
+    const { error } = await db.from('bfcm_production_steps').update({ made_count: made, status, updated_at: new Date().toISOString(), updated_by: me.id }).eq('id', step.id)
+    if (error) return { ok: false, error: 'Unable to save. Reload and try again.' }
+    await logMade(slug, step.id, made - step.made_count, me.id)
+    return done(slug)
   })
 }
 

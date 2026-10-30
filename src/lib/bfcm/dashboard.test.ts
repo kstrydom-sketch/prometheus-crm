@@ -8,7 +8,7 @@ const brand: Brand = { slug: 'example', name: 'Example', cap: 100, aliases: [], 
 const offer = (startDate: string) => ({ offer: 'Offer', startDate, endDate: '2026-12-01', sitewide: true, included: '', hasExclusions: false, exclusions: '' })
 const today = '2026-11-01'
 const step = (id: string, kind: string, status = 'todo', extra: Partial<ProductionStep> = {}): ProductionStep =>
-  ({ id, plan_slug: 'example', parent_id: null, sort_order: 1, kind, title: id, plan_key: null, due_date: null, status, ...extra })
+  ({ id, plan_slug: 'example', parent_id: null, sort_order: 1, kind, title: id, plan_key: null, due_date: null, status, made_count: 0, ...extra })
 function input(steps: ProductionStep[], over: Partial<BrandInput> = {}, assignees: { step_id: string; profile_id: string }[] = []): BrandInput {
   const draft = { ...createDraft(brand), prePercent: 50, offers: { pre: offer('2026-11-11'), bf: offer('2026-11-21') } }
   return { slug: 'example', name: 'Example', cap: 100, stage: 'locked', draft, tasks: buildTaskTree(steps, assignees, {}), ...over }
@@ -87,4 +87,27 @@ test('every step status shows, and calibration waiting on the client is surfaced
   assert.deepEqual(p.steps.map(s => [s.label, s.status]), [['Review', 'done'], ['Calibration', 'in_progress'], ['Statics', 'todo']])
   assert.deepEqual(p.tasks, { todo: 1, inProgress: 1, waiting: 1, done: 1 })
   assert.ok(p.flags.some(f => f.text === 'Waiting on client: Statics samples'))
+})
+
+test('a partial count shows as made and the rest stays in its status', () => {
+  const p = brandProgress(input([
+    step('s', 'statics'),
+    step('a', 'task', 'in_progress', { parent_id: 's', plan_key: 'textOffer:pre', made_count: 4 }),
+    step('b', 'task', 'waiting_client', { parent_id: 's', plan_key: 'textOffer:bf', made_count: 99 }),
+  ]), today)
+  assert.deepEqual([p.made, p.inWork, p.waiting, p.statics.made], [14, 6, 0, 14])
+})
+
+test('an unsplit Make step is flagged because it cannot be counted', () => {
+  assert.ok(brandProgress(input([step('s', 'statics')]), today).flags.some(f => f.text.startsWith('Statics not split')))
+})
+
+test('pace comes from the log, corrections included', () => {
+  const board = productionBoard([input([])], [], today, [
+    { delta: 30, created_at: '2026-11-01T15:00:00Z' },
+    { delta: -2, created_at: '2026-11-01T16:00:00Z' },
+    { delta: 7, created_at: '2026-10-28T15:00:00Z' },
+    { delta: 500, created_at: '2026-10-20T15:00:00Z' },
+  ])
+  assert.deepEqual([board.madeToday, board.madePerDay], [28, 5])
 })

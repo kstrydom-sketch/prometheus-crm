@@ -7,7 +7,7 @@ export type StepStatus = 'todo' | 'in_progress' | 'waiting_client' | 'done'
 export type Phase = 'pre' | 'bf'
 export type ProductionStep = {
   id: string; plan_slug: string; parent_id: string | null; sort_order: number; kind: string
-  title: string; plan_key: string | null; due_date: string | null; status: string
+  title: string; plan_key: string | null; due_date: string | null; status: string; made_count: number
 }
 export type Person = { id: string; name: string }
 export type TaskNode = ProductionStep & { assignees: string[]; commentCount: number; children: TaskNode[] }

@@ -5,8 +5,9 @@ import { getCachedProfiles } from '@/lib/profiles'
 import { canEdit } from '@/lib/permissions'
 import { CALIBRATION_TRACKS, buildTaskTree, type Person, type ProductionStep, type TaskNode } from './production'
 import { CALIBRATION_BUCKET } from './calibration-drive'
+import type { MadeEntry } from './dashboard'
 
-const STEP_COLUMNS = 'id,plan_slug,parent_id,sort_order,kind,title,plan_key,due_date,status'
+const STEP_COLUMNS = 'id,plan_slug,parent_id,sort_order,kind,title,plan_key,due_date,status,made_count'
 
 export type BfcmComment = { id: string; step_id: string | null; author_id: string | null; author_name: string; body: string; created_at: string }
 export type CalibrationItem = { id: string; track: string; name: string; media_type: 'image' | 'video'; url: string; sort_order: number; client_status: string; created_at: string }
@@ -64,6 +65,13 @@ export async function loadAllProductionTrees(): Promise<Map<string, TaskNode[]> 
   const bySlug = new Map<string, ProductionStep[]>()
   for (const s of (steps.data ?? []) as ProductionStep[]) bySlug.set(s.plan_slug, [...(bySlug.get(s.plan_slug) ?? []), s])
   return new Map([...bySlug].map(([slug, rows]) => [slug, buildTaskTree(rows, assignees.data ?? [], {})]))
+}
+
+/** Creatives logged in the last 8 days, for the list page's pace. Empty on any error. */
+export async function loadRecentMade(): Promise<MadeEntry[]> {
+  const since = new Date(Date.now() - 8 * 86_400_000).toISOString()
+  const { data, error } = await createServiceClient().from('bfcm_made_log').select('delta,created_at').gte('created_at', since)
+  return error ? [] : (data ?? []) as MadeEntry[]
 }
 
 const TRACK_COLUMNS = 'track,status,sent_at,submitted_at,submitted_by_name,client_note'
