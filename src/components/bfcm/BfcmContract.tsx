@@ -93,7 +93,7 @@ export default function BfcmContract({ brandId, contracts, documents }: { brandI
     </div>)}
     {form && <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div className={s.inline}>
-        <label className="btn-secondary btn-sm" style={{ cursor: busy ? 'default' : 'pointer' }}>
+        <label className={`btn-secondary btn-sm ${s.fileButton}`}>
           Upload signed file
           <input type="file" hidden accept=".pdf,.docx,.txt,application/pdf" disabled={!!busy} onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void uploadFile(f) }} />
         </label>
