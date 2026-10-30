@@ -14,11 +14,12 @@
 .chev:hover { background: var(--border); }
 .main { min-width: 0; display: flex; align-items: center; gap: 10px; }
 .name { min-width: 0; border: 0; background: none; padding: 0; color: var(--text-primary); font: inherit; font-weight: 600; text-align: left; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.nameInput { min-width: 0; flex: 1; font: inherit; font-weight: 600; padding: 3px 6px; border: 1px solid var(--accent); border-radius: 6px; background: var(--background); color: var(--text-primary); }
+.nameInput { width: auto; min-width: 0; flex: 1; font: inherit; font-weight: 600; padding: 3px 6px; border: 1px solid var(--accent); border-radius: 6px; background: var(--background); color: var(--text-primary); }
+.nameBlock { min-width: 0; display: flex; flex-direction: column; flex: 1; }
 .meta { color: var(--text-secondary); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .done .name { color: var(--text-secondary); text-decoration: line-through; }
 
-.status { appearance: none; border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; background: var(--surface-raised); color: var(--text-secondary); }
+.status { flex: none; width: 132px; appearance: none; border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; background: var(--surface-raised); color: var(--text-secondary); }
 .status:disabled { cursor: default; opacity: 1; }
 .s-todo { color: var(--text-secondary); }
 .s-in_progress { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, transparent); background: var(--accent-muted); }
@@ -36,7 +37,7 @@
 .option:hover { background: var(--surface-raised); }
 .check { margin-left: auto; color: var(--accent); font-weight: 700; }
 
-.due { font: inherit; font-size: 12px; padding: 3px 6px; border: 1px solid transparent; border-radius: 6px; background: none; color: var(--text-secondary); color-scheme: light dark; }
+.due { width: auto; font: inherit; font-size: 12px; padding: 3px 6px; border: 1px solid transparent; border-radius: 6px; background: none; color: var(--text-secondary); color-scheme: light dark; }
 .due:hover, .due:focus { border-color: var(--border); }
 .late { color: var(--danger); font-weight: 600; }
 .count { display: inline-flex; align-items: center; gap: 4px; color: var(--text-secondary); font-size: 12px; min-width: 32px; }
@@ -52,7 +53,7 @@
 .panelSub { padding-left: 82px; }
 .panelTitle { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-secondary); margin: 0 0 6px; }
 .inline { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-.input { flex: 1; min-width: 180px; padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--background); color: var(--text-primary); font: inherit; }
+.input { width: auto; flex: 1; min-width: 180px; padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--background); color: var(--text-primary); font: inherit; }
 .footer { padding: 12px 18px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .error { margin: 0; padding: 10px 18px; color: var(--danger); border-top: 1px solid var(--border); }
 
@@ -63,7 +64,7 @@
 .commentBody { margin: 2px 0 0; white-space: pre-wrap; line-height: 1.5; overflow-wrap: anywhere; }
 .mention { color: var(--accent); font-weight: 600; }
 .composer { position: relative; display: flex; gap: 8px; align-items: flex-end; }
-.textarea { flex: 1; min-height: 38px; max-height: 200px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--background); color: var(--text-primary); font: inherit; resize: vertical; }
+.textarea { flex: 1; width: auto; min-height: 38px; max-height: 200px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--background); color: var(--text-primary); font: inherit; resize: vertical; }
 .suggest { position: absolute; left: 0; bottom: calc(100% + 4px); z-index: 30; width: 240px; padding: 4px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); box-shadow: 0 12px 32px rgba(0,0,0,.25); }
 .linkBtn { border: 0; background: none; padding: 0; color: var(--text-secondary); font: inherit; font-size: 12px; cursor: pointer; text-decoration: underline; }
 
@@ -75,20 +76,28 @@
 .thumb img, .thumb video { width: 100%; height: 100%; object-fit: contain; display: block; }
 .pin { position: absolute; width: 18px; height: 18px; margin: -9px 0 0 -9px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; border: 2px solid #fff; }
 .tileBody { padding: 8px; display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
-.drop { border: 1px dashed var(--text-muted); border-radius: 10px; padding: 18px; text-align: center; color: var(--text-secondary); cursor: pointer; }
+.drop { margin: 0; font-size: 13px; font-weight: 400; text-transform: none; letter-spacing: normal; border: 1px dashed var(--text-muted); border-radius: 10px; padding: 18px; text-align: center; color: var(--text-secondary); cursor: pointer; }
 .drop[data-over="true"] { border-color: var(--accent); background: var(--accent-muted); }
-.linkField { flex: 1; min-width: 220px; padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--background); color: var(--text-primary); font: inherit; font-size: 12px; }
+.linkField { width: auto; flex: 1; min-width: 220px; padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--background); color: var(--text-primary); font: inherit; font-size: 12px; }
 .terms { display: grid; grid-template-columns: 110px 1fr; gap: 6px 12px; margin: 0; }
 .terms dt { color: var(--text-secondary); font-weight: 600; }
 .terms dd { margin: 0; white-space: pre-wrap; line-height: 1.5; }
 .field { display: flex; flex-direction: column; gap: 4px; font-weight: 600; color: var(--text-secondary); font-size: 12px; }
 .field textarea, .field input { font-weight: 400; font-size: 13px; }
 
+.fileButton { display: inline-flex; align-items: center; margin: 0; cursor: pointer; text-transform: none; letter-spacing: normal; }
+
 @media (max-width: 720px) {
   .section { margin: 16px 16px 0; }
-  .row { grid-template-columns: 22px minmax(0, 1fr) 28px; row-gap: 6px; padding: 10px 12px; }
-  .row > .people, .row > .dueCell, .row > .count { grid-column: 2 / 3; justify-self: start; }
-  .row > .status, .row > .statusCell { grid-column: 2 / 3; justify-self: start; }
+  /* Name on top at full width, status under it, then people · due · comments on one line. */
+  .row { grid-template-columns: 22px auto auto 1fr 28px; row-gap: 6px; column-gap: 8px; padding: 10px 12px; align-items: start; }
+  .row > .chev { grid-row: 1; grid-column: 1; }
+  .row > .main { grid-row: 1; grid-column: 2 / 5; flex-wrap: wrap; gap: 6px; }
+  .row > .menuWrap { grid-row: 1; grid-column: 5; }
+  .row > .people { grid-row: 2; grid-column: 2; }
+  .row > .dueCell { grid-row: 2; grid-column: 3; }
+  .row > .count { grid-row: 2; grid-column: 4; justify-self: start; }
+  .nameBlock { flex-basis: 100%; order: -1; }
   .sub { padding-left: 24px; }
   .panel, .panelSub { padding-left: 16px; padding-right: 12px; }
   .terms { grid-template-columns: 1fr; }

@@ -129,7 +129,7 @@ function TaskRow({ node, ctx, sub }: { node: TaskNode; ctx: Ctx; sub: boolean })
         {!known && <option value={status}>{stepStatusLabel(status)}</option>}
         {STEP_STATUSES.map(st => <option key={st.id} value={st.id}>{st.label}</option>)}
       </select>
-      <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', flex: 1 }}>
+      <div className={s.nameBlock}>
         {renaming
           ? <RenameInput initial={node.title} onDone={title => { setRenaming(false); if (title && title !== node.title) void run(() => updateTask(slug, node.id, { title })) }} />
           : <button className={s.name} onClick={() => ctx.toggle(node.id)} title={node.title}>{node.title}</button>}
