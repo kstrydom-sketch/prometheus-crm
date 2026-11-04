@@ -18,6 +18,8 @@ import BrandThread from '@/components/preview/BrandThread'
 import ClientRulesBoard from '@/components/brand/ClientRulesBoard'
 import ContactsCard from '@/components/brand/ContactsCard'
 import IntakeAnswers from '@/components/brand/IntakeAnswers'
+import IntakePanel from '@/components/brand/IntakePanel'
+import { intakeCompleteness, normalizeIntake } from '@/lib/brands/intake'
 import { loadRules, type BrandContact } from '@/lib/brands/profile'
 import { saveBrandProfileFields } from '@/lib/brands/actions'
 import { formatDue, isOpen, jobStage, orderSteps, stageInfo, stepStatusStyle, type Job, type JobStep } from '@/lib/jobs/model'
@@ -94,7 +96,7 @@ export default async function BrandPage({
   const engineerNames = (peRows ?? []).map((r: { name: string }) => r.name)
   const dna = (dnaRow ?? null) as BrandDna | null
   const documents = (docRows ?? []) as BrandDocument[]
-  const docsOf = (k: 'guidelines' | 'intake' | 'other') => documents.filter(d => (d.kind ?? 'other') === k)
+  const docsOf = (k: string) => documents.filter(d => (d.kind ?? 'other') === k)
   const contacts = (contactRows ?? []) as BrandContact[]
   const brandComments = (commentRows ?? []) as BrandComment[]
   const jobs = (jobRows ?? []) as unknown as BrandJob[]
@@ -107,6 +109,16 @@ export default async function BrandPage({
   const done = allProjects.filter(p => p.is_complete)
   const projectNames = Object.fromEntries(allProjects.map(p => [p.id, p.name]))
   const hasGuidelines = docsOf('guidelines').length > 0 || !!b.brand_guidelines
+  const intakeItems = intakeCompleteness({
+    form: b.intake_form ? normalizeIntake(b.intake_form) : null,
+    docKinds: documents.map(d => d.kind ?? 'other'),
+    hasGuidelineText: !!b.brand_guidelines?.trim(),
+    aiSensitivity: b.ai_sensitivity ?? null,
+    activeRuleCount: rules.filter(r => r.status === 'active').length,
+    contactCount: contacts.length,
+    preferredChannel: b.preferred_channel ?? null,
+    dna,
+  })
 
   const clientNumStr = b.client_number != null ? `#${String(b.client_number).padStart(3, '0')}` : null
   const billing = b.is_trial ? { label: 'On trial', color: 'var(--warning)' } : b.is_active ? { label: 'Active', color: 'var(--success)' } : { label: 'Inactive', color: 'var(--danger)' }
@@ -166,6 +178,16 @@ export default async function BrandPage({
 
       <div className="bp-layout">
         <div className="bp-col">
+          <IntakePanel
+            brandId={brandId}
+            brandName={b.name}
+            token={b.intake_token ?? null}
+            items={intakeItems}
+            submittedAt={b.intake_submitted_at ?? null}
+            updatedAt={b.intake_updated_at ?? null}
+            canEdit={isAuthorized}
+          />
+
           <ClientRulesBoard
             brandId={brandId}
             brandName={b.name}
@@ -292,6 +314,24 @@ export default async function BrandPage({
                     embedded
                   />
                 </div>
+                {([
+                  ['logo', 'Logos', 'Upload logo files', 'Vector (SVG, AI, EPS, PDF) and PNG versions'],
+                  ['product_images', 'Product images', 'Upload product images', 'High-quality packshots and lifestyle shots'],
+                  ['fonts', 'Fonts', 'Upload font files', 'OTF, TTF, WOFF or a .zip'],
+                ] as const).map(([k, label, up, hint]) => (
+                  <div key={k}>
+                    <p className="bp-label">{label}</p>
+                    <BrandDocuments
+                      brandId={brandId}
+                      documents={docsOf(k)}
+                      kind={k}
+                      title={label}
+                      uploadLabel={up}
+                      uploadHint={hint}
+                      emptyText={`No ${label.toLowerCase()} yet. The client can add them on the intake link.`}
+                    />
+                  </div>
+                ))}
                 <div>
                   <p className="bp-label">Intake</p>
                   <IntakeAnswers brandId={brandId} answers={b.intake_answers ?? null} canEdit={isAuthorized} />

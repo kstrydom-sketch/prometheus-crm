@@ -9,6 +9,8 @@ import CopyDeckPanel from '@/components/CopyDeckPanel'
 import CreativeAssetsManager from '@/components/CreativeAssetsManager'
 import ClientFeedbackPanel from '@/components/ClientFeedbackPanel'
 import ClientRulesCallout from '@/components/brand/ClientRulesCallout'
+import { IntakeMissing } from '@/components/brand/IntakePanel'
+import type { IntakeItem } from '@/lib/brands/intake'
 import type { RuleWithMentions } from '@/lib/brands/profile'
 import CampaignTrackingPanel from '@/components/CampaignTrackingPanel'
 import NotesThread from '@/components/NotesThread'
@@ -367,7 +369,7 @@ function CommentList({ comments, empty }: { comments: ProjectComment[]; empty: s
 
 export default function PreviewProjectView({
   project: p, brand, assets, comments, images, dna, revisionsByAsset, lpEditorName, creativeEditorName, journeyName, journeys, profiles, campaigns, todayIso, authorName, brandLandingPages, brandComments, brandDocuments, projectBriefs: allBriefs, serverNow, currentUserId,
-  lpTracking, lpAdMatches, lpDaily, accountDaily, nowMs, brandAdAccount, sourceOffer = null, liquidFiles = [], clientRules = [],
+  lpTracking, lpAdMatches, lpDaily, accountDaily, nowMs, brandAdAccount, sourceOffer = null, liquidFiles = [], clientRules = [], intakeItems = [],
 }: {
   project: Project; brand: Brand; assets: CreativeAsset[]; comments: ProjectComment[]
   images: ProjectImage[]; dna: BrandDna | null
@@ -380,6 +382,8 @@ export default function PreviewProjectView({
   projectBriefs: ProjectBrief[]
   /** The brand's standing client feedback (client_rules), active only. */
   clientRules?: RuleWithMentions[]
+  /** What the client still has not given us (lib/brands/intake.ts). */
+  intakeItems?: IntakeItem[]
   /** Server clock at render, for judging whether a brief's AI read is stale. */
   serverNow: number
   currentUserId: string | null
@@ -1103,6 +1107,7 @@ export default function PreviewProjectView({
           )}
           {tab === 'overview' && (
             <>
+              {brand?.id && <IntakeMissing brandId={brand.id} brandName={brand.name} items={intakeItems} />}
               {brand?.id && <ClientRulesCallout brandId={brand.id} brandName={brand.name} rules={clientRules} surface="all" />}
               {/* First thing on the tab, by design — "anytime you open up a
                   project it's the first thing that you see". Lives on the brand,
@@ -1433,6 +1438,7 @@ export default function PreviewProjectView({
 
           {tab === 'lp' && (
             <>
+              {brand?.id && <IntakeMissing brandId={brand.id} brandName={brand.name} items={intakeItems} />}
               {brand?.id && <ClientRulesCallout brandId={brand.id} brandName={brand.name} rules={clientRules} surface="landing_page" />}
               <LpNextStep
                 project={p}
@@ -1934,6 +1940,7 @@ export default function PreviewProjectView({
 
           {tab === 'creatives' && (
             <>
+              {brand?.id && <IntakeMissing brandId={brand.id} brandName={brand.name} items={intakeItems} />}
               {brand?.id && <ClientRulesCallout brandId={brand.id} brandName={brand.name} rules={clientRules} surface="creatives" />}
               {/* First thing on the tab, because it is the first thing an editor
                   does — nothing below works until the folder is synced. It was

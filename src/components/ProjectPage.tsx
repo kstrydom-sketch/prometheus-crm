@@ -1,3 +1,4 @@
+import { loadIntakeStatus } from '@/lib/brands/intake'
 import { notFound, redirect } from 'next/navigation'
 import { createClient, getCachedUser } from '@/lib/supabase/server'
 import { canEdit } from '@/lib/permissions'
@@ -129,9 +130,10 @@ export default async function ProjectPage({ projectId }: { projectId: string }) 
   ])
 
   const assets = (assetsRaw ?? []) as CreativeAsset[]
-  const [revisionsByAsset, clientRules] = await Promise.all([
+  const [revisionsByAsset, clientRules, intake] = await Promise.all([
     getRevisionsByAsset(supabase, assets.map(a => a.id)),
     loadRules(supabase, p.brand_id),
+    loadIntakeStatus(supabase, p.brand_id),
   ])
 
   // Same idiom as /results/page.tsx: captured once per request, drives the
@@ -224,6 +226,7 @@ export default async function ProjectPage({ projectId }: { projectId: string }) 
       sourceOffer={(sourceOfferRaw ?? null) as LpBriefSourceOffer | null}
       liquidFiles={(liquidFilesRaw ?? []) as LpLiquidFile[]}
       clientRules={clientRules}
+      intakeItems={intake?.items ?? []}
     />
   )
 }

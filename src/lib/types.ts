@@ -132,6 +132,10 @@ export interface Brand {
   preferred_channel?: 'email' | 'whatsapp' | 'slack' | 'phone' | 'sms' | 'other' | null
   channel_details?: string | null
   intake_answers?: string | null
+  intake_token?: string | null
+  intake_form?: Record<string, unknown> | null
+  intake_updated_at?: string | null
+  intake_submitted_at?: string | null
 }
 
 /** A file the client sent us, kept on the brand. Bytes live in the PRIVATE
@@ -147,8 +151,12 @@ export interface BrandDocument {
   uploaded_by: string | null
   uploaded_by_name: string | null
   created_at: string
-  /** guidelines | intake | other. Absent before 20261029_brand_profile.sql. */
-  kind?: 'guidelines' | 'intake' | 'other'
+  /** File type. Absent before 20261029_brand_profile.sql; logo, product_images
+   *  and fonts arrive with 20261104_brand_intake_link.sql. Other branches may
+   *  write kinds this one does not know, so read with a fallback. */
+  kind?: string
+  /** Uploaded by the client through the intake link. */
+  from_client?: boolean
 }
 
 /** A creative brief on a project. Bytes live in the PRIVATE project-briefs

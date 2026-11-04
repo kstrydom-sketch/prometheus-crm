@@ -15,6 +15,9 @@ import {
 } from '@/components/jobs/JobControls'
 import ClientRulesCallout from '@/components/brand/ClientRulesCallout'
 import { loadRules } from '@/lib/brands/profile'
+import { loadIntakeStatus } from '@/lib/brands/intake'
+import { IntakeMissing } from '@/components/brand/IntakePanel'
+import '@/components/brand/brand.css'
 import { ReviewSummary } from '@/components/jobs/ReviewRounds'
 import StepWork from '@/components/jobs/StepWork'
 import { loadCardWork } from '@/lib/jobs/card-work'
@@ -72,7 +75,9 @@ export default async function JobPage({
   const describe = (a: ActivityRow) => describeActivity(a, nameOf, stepTitle, job)
   const next = work.find(s => isOpen(s.status))
   const commentCount = (stepId: string) => comments.filter(c => c.step_id === stepId).length
-  const rules = job.brands ? await loadRules(supabase, job.brands.id) : []
+  const [rules, intake] = job.brands
+    ? await Promise.all([loadRules(supabase, job.brands.id), loadIntakeStatus(supabase, job.brands.id)])
+    : [[], null]
   // The offer and production cards behind the linked steps, and their rounds.
   const cardWork = await loadCardWork(supabase, job)
   const linked = (s: JobStep) => isLinkedStep(s, job)
@@ -124,6 +129,7 @@ export default async function JobPage({
         </div>
       </header>
 
+      {job.brands && intake && <IntakeMissing brandId={job.brands.id} brandName={job.brands.name} items={intake.items} />}
       {job.brands && rules.length > 0 && (
         <ClientRulesCallout brandId={job.brands.id} brandName={job.brands.name} rules={rules} surface="all" />
       )}
