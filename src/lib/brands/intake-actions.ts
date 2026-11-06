@@ -5,8 +5,7 @@
 // Two audiences. Staff (canEdit) create or rotate a brand's link. The client,
 // who has no account, holds only the token: every public action below looks the
 // brand up by that token with the service client and can touch nothing else.
-// What a token can do: write this brand's intake answers and AI / channel
-// fields, add contacts and rules on Done, upload files to this brand, and remove
+// What a token can do: write this brand's intake answers and AI field, add contacts and rules on Done, upload files to this brand, and remove
 // only files the client uploaded. It cannot read any other brand data.
 
 import { randomBytes } from 'node:crypto'
@@ -22,8 +21,9 @@ import { filledContacts, intakeText, isIntakeToken, normalizeIntake, ruleLines }
 
 type Result<T = object> = ({ ok: true } & T) | { ok: false; error: string }
 
-/** The kinds a client may upload. Contract stays a staff-only file type. */
-const CLIENT_KINDS = ['logo', 'product_images', 'fonts', 'guidelines', 'other'] as const
+/** The kinds a client may upload. 'intake' holds their marketing calendar.
+ *  Contract stays a staff-only file type. */
+const CLIENT_KINDS = ['guidelines', 'logo', 'product_images', 'fonts', 'intake', 'other'] as const
 type ClientKind = typeof CLIENT_KINDS[number]
 
 // ── staff ─────────────────────────────────────────────────────────────────
@@ -71,8 +71,6 @@ export async function saveIntake(token: string, raw: unknown, submit: boolean): 
   }
   // Only what they answered. A blank never wipes what the team already set.
   if (form.ai != null) update.ai_sensitivity = form.ai
-  if (form.channel) update.preferred_channel = form.channel
-  if (form.channel_details.trim()) update.channel_details = form.channel_details.trim()
   if (submit) update.intake_submitted_at = now
 
   const { error } = await db.from('brands').update(update).eq('id', brand.id)

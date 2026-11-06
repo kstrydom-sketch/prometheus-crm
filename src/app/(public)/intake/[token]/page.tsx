@@ -17,7 +17,7 @@ export default async function IntakePage({ params }: { params: Promise<{ token: 
   const db = createServiceClient()
   const { data: brand } = await db
     .from('brands')
-    .select('id, name, intake_form, intake_submitted_at, intake_updated_at, ai_sensitivity, preferred_channel, channel_details')
+    .select('id, name, intake_form, intake_submitted_at, intake_updated_at, ai_sensitivity')
     .eq('intake_token', token)
     .maybeSingle()
   if (!brand) notFound()
@@ -26,16 +26,12 @@ export default async function IntakePage({ params }: { params: Promise<{ token: 
     .from('brand_documents')
     .select('id, file_name, kind, byte_size, from_client, created_at')
     .eq('brand_id', brand.id)
-    .in('kind', ['logo', 'product_images', 'fonts', 'guidelines', 'other'])
+    .in('kind', ['guidelines', 'logo', 'product_images', 'fonts', 'intake', 'other'])
     .order('created_at', { ascending: true })
 
   // First visit: start from what the team already has, so the client confirms
   // rather than retypes.
-  const form = normalizeIntake(brand.intake_form ?? {
-    ai: brand.ai_sensitivity ?? null,
-    channel: brand.preferred_channel ?? '',
-    channel_details: brand.channel_details ?? '',
-  })
+  const form = normalizeIntake(brand.intake_form ?? { ai: brand.ai_sensitivity ?? null })
 
   return (
     <IntakeFormView

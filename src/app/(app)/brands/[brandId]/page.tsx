@@ -114,9 +114,7 @@ export default async function BrandPage({
     docKinds: documents.map(d => d.kind ?? 'other'),
     hasGuidelineText: !!b.brand_guidelines?.trim(),
     aiSensitivity: b.ai_sensitivity ?? null,
-    activeRuleCount: rules.filter(r => r.status === 'active').length,
     contactCount: contacts.length,
-    preferredChannel: b.preferred_channel ?? null,
     dna,
   })
 
@@ -339,7 +337,7 @@ export default async function BrandPage({
                     brandId={brandId}
                     documents={docsOf('intake')}
                     kind="intake"
-                    title="Intake files"
+                    title="Intake files & marketing calendar"
                     uploadLabel="Upload intake form"
                     uploadHint="The filled-in intake form or questionnaire"
                     emptyText="No intake files."
