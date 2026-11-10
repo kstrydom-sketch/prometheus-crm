@@ -222,10 +222,21 @@ export default function IntakeFormView({
             placeholder={'e.g. Never say "cure"\nNo "anti-ageing": say "skin renewal"'} />
           <Q k="design_donts" rows={2} label="Visual don'ts" hint="One per line."
             placeholder={'e.g. No product on a pure white background'} />
+          <Q k="campaign_style" label="Do your sales and campaigns look or sound different?"
+            hint="Fonts, colours or wording you use for Black Friday and other sales, if they differ from the everyday brand."
+            placeholder={'e.g. Black Friday uses Anton in all caps on black\nWe say "Black Friday Deals", never "Special Offers"'} />
         </section>
 
         <section className="ik-card">
-          <h2><span className="ik-step">5</span> How do you feel about AI?</h2>
+          <h2><span className="ik-step">5</span> Video &amp; music</h2>
+          <Q k="footage_link" rows={2} label="Link to existing footage"
+            hint="Product videos, UGC, behind the scenes, past ads: a Drive or Dropbox folder is perfect." />
+          <Q k="music" rows={2} label="Music you like, and music you don't"
+            placeholder="e.g. Upbeat, no lyrics. Never trap or anything that sounds like TikTok trends. Example: link to a song you love" />
+        </section>
+
+        <section className="ik-card">
+          <h2><span className="ik-step">6</span> How do you feel about AI?</h2>
           <p className="ik-help">We sometimes use AI to create or touch up images and draft copy. Some brands love it, some don&apos;t want it at all. Either is fine; we just need to know.</p>
           <div className="ik-choices" role="radiogroup" aria-label="AI use">
             {AI_CHOICES.map(c => (
@@ -240,7 +251,7 @@ export default function IntakeFormView({
         </section>
 
         <section className="ik-card">
-          <h2><span className="ik-step">6</span> What&apos;s coming up</h2>
+          <h2><span className="ik-step">7</span> What&apos;s coming up</h2>
           <Q k="upcoming" label="Launches, sales or events in the next few months"
             placeholder={"e.g. New SPF launch March 10\nMother's Day sale May 1-12"} />
           <div className="ik-slots">
@@ -250,7 +261,7 @@ export default function IntakeFormView({
         </section>
 
         <section className="ik-card">
-          <h2><span className="ik-step">7</span> Store &amp; tech setup</h2>
+          <h2><span className="ik-step">8</span> Store &amp; tech setup</h2>
           <p className="ik-help">So landing pages and offers go live without back-and-forth.</p>
           <Pick k="platform" label="What is your website built on?" choices={PLATFORMS} />
           <Q k="page_builder" rows={1} label="Theme or page builder" hint="If you know it, e.g. Dawn theme, Replo, GemPages, Shogun." />
@@ -262,7 +273,7 @@ export default function IntakeFormView({
         </section>
 
         <section className="ik-card">
-          <h2><span className="ik-step">8</span> Who we work with</h2>
+          <h2><span className="ik-step">9</span> Who we work with</h2>
           <p className="ik-help">We&apos;ll work with you in a shared Slack channel. Tell us who should be in it, and who approves offers and creative.</p>
           {form.contacts.map((c, i) => (
             <div key={i} className="ik-contact">

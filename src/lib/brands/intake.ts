@@ -64,6 +64,11 @@ export interface IntakeForm {
   past_ads: string
   copy_donts: string
   design_donts: string
+  /** How sales and campaigns differ from the everyday brand (fonts, colours, wording). */
+  campaign_style: string
+  // Video
+  footage_link: string
+  music: string
   // Coming up
   upcoming: string
   calendar_link: string
@@ -83,7 +88,8 @@ const TEXT_FIELDS = [
   'ai_note', 'colours', 'fonts',
   'push_products', 'avoid_products', 'past_offers', 'offer_limits',
   'reasons', 'buyer', 'frustrations', 'competitors', 'steer_clear', 'proof',
-  'brand_changes', 'past_ads', 'copy_donts', 'design_donts',
+  'brand_changes', 'past_ads', 'copy_donts', 'design_donts', 'campaign_style',
+  'footage_link', 'music',
   'upcoming', 'calendar_link', 'page_builder', 'tech_notes',
   'asset_links', 'anything_else',
 ] as const
@@ -161,8 +167,13 @@ export function intakeText(f: IntakeForm): string {
       ['Past ads that worked / did not', f.past_ads],
       ['Words, claims or phrases to avoid', f.copy_donts],
       ["Visual don'ts", f.design_donts],
+      ['How sales and campaigns look and sound different', f.campaign_style],
       ['Colours (no guidelines)', f.colours],
       ['Fonts (no guidelines)', f.fonts],
+    ]],
+    ['VIDEO & MUSIC', [
+      ['Existing footage', f.footage_link],
+      ['Music likes and dislikes', f.music],
     ]],
     ['AI', [
       ['How they feel about AI', [AI_CHOICES.find(c => c.v === f.ai)?.label ?? '', f.ai_note].filter(Boolean).join(' — ')],
